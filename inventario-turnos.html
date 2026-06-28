@@ -471,12 +471,14 @@ function subscribeEntries() {
 function renderUserScreen() {
   const container = document.getElementById('user-buttons');
   const users = STATE.userNames.map((n,i) => ({ id: i+1, name: n }));
-  container.innerHTML = users.map(u => `
-    <button onclick="selectUser(${u.id},'${escHTML(u.name)}')"
-      class="w-full py-5 rounded-2xl text-xl font-black text-white border-2 border-slate-600 bg-slate-800 active:scale-95 transition-transform">
-      👷 ${u.name}
-    </button>
-  `).join('');
+  container.innerHTML = '';
+  users.forEach(u => {
+    const btn = document.createElement('button');
+    btn.textContent = '👷 ' + u.name;
+    btn.style.cssText = 'width:100%;padding:22px 16px;border-radius:16px;font-size:1.25rem;font-weight:900;color:#fff;border:2px solid #475569;background:#1e293b;cursor:pointer;display:block;margin-bottom:4px;';
+    btn.addEventListener('click', function() { selectUser(u.id, u.name); });
+    container.appendChild(btn);
+  });
   show('screen-user');
 }
 
@@ -1136,14 +1138,20 @@ function showToast(msg, duration = 2200) {
   toastTimer = setTimeout(() => t.classList.remove('show'), duration);
 }
 
-// Prevent zoom on double-tap
-document.addEventListener('touchend', (e) => {
-  if (e.target.closest('.numpad-btn, .tab-btn, button, select')) e.preventDefault();
-}, { passive: false });
+// Prevent pinch zoom only
+document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
+document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
 
-// Prevent pinch zoom
-document.addEventListener('gesturestart', e => e.preventDefault());
-document.addEventListener('gesturechange', e => e.preventDefault());
+// Double-tap zoom prevention - only on non-interactive elements
+let lastTouchEnd = 0;
+document.addEventListener('touchend', (e) => {
+  const now = Date.now();
+  const isInteractive = e.target.closest('button, select, input, a');
+  if (now - lastTouchEnd < 300 && !isInteractive) {
+    e.preventDefault();
+  }
+  lastTouchEnd = now;
+}, { passive: false });
 
 // Admin PIN confirm on Enter
 document.getElementById('admin-pin-input').addEventListener('keydown', (e) => {
