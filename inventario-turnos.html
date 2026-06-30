@@ -5,1158 +5,1362 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="theme-color" content="#0f172a">
-<title>Control de Inventario</title>
+<meta name="theme-color" content="#0a0f1e">
+<title>Inventario de Turno</title>
 <script src="https://cdn.tailwindcss.com"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
 
-<!-- =====================================================
-     FIREBASE CONFIGURATION — PEGA TUS DATOS AQUÍ
-     ===================================================== -->
+<!-- ═══════════════════════════════════════════════════════
+     FIREBASE — PEGA TUS CREDENCIALES AQUÍ
+     ═══════════════════════════════════════════════════════ -->
 <script type="module">
-  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
-  import { getFirestore, collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, enableIndexedDbPersistence, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+  import { initializeApp }          from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getFirestore, collection, doc, setDoc, getDoc, getDocs,
+           onSnapshot, deleteDoc, enableIndexedDbPersistence }
+    from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
 
   const firebaseConfig = {
-    apiKey: "AIzaSyBupEaF4lqU5mJOQK3Lgh-VFa2z-hygXSg",
-    authDomain: "inventario-turnos.firebaseapp.com",
-    projectId: "inventario-turnos",
-    storageBucket: "inventario-turnos.firebasestorage.app",
-    messagingSenderId: "168332231111",
-    appId: "1:168332231111:web:3d32a80048dbe4d1a659e2"
+    apiKey:            "",
+    authDomain:        "",
+    projectId:         "",
+    storageBucket:     "",
+    messagingSenderId: "",
+    appId:             ""
   };
 
   const app = initializeApp(firebaseConfig);
-  const db = getFirestore(app);
+  const db  = getFirestore(app);
 
-  enableIndexedDbPersistence(db).catch((err) => {
-    console.warn("Persistencia offline no disponible:", err.code);
-  });
+  enableIndexedDbPersistence(db).catch(e => console.warn("Offline:", e.code));
 
-  // Exponer globalmente
-  window._db = db;
-  window._fsOps = { collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc, query, orderBy };
-  window._firebaseReady = true;
-  document.dispatchEvent(new Event("firebase-ready"));
+  window._db     = db;
+  window._fs     = { collection, doc, setDoc, getDoc, getDocs, onSnapshot, deleteDoc };
+  window._fbReady = true;
+  document.dispatchEvent(new Event("fb-ready"));
 </script>
 
 <style>
-  * { -webkit-tap-highlight-color: transparent; box-sizing: border-box; }
-  html, body { height: 100%; overflow: hidden; background: #0f172a; font-family: 'Inter', system-ui, sans-serif; }
+*{ box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+html,body{ height:100%; overflow:hidden; background:#0a0f1e;
+           font-family:'Inter',system-ui,sans-serif; color:#f1f5f9; }
 
-  .screen { position: fixed; inset: 0; display: flex; flex-direction: column; background: #0f172a; overflow: hidden; }
-  .screen.hidden { display: none !important; }
+/* ── Screens ── */
+.screen{ position:fixed; inset:0; display:flex; flex-direction:column;
+         background:#0a0f1e; overflow:hidden; }
+.screen.off{ display:none!important; }
 
-  /* Teclado numérico */
-  .numpad-btn {
-    background: #1e293b;
-    border: 1px solid #334155;
-    border-radius: 10px;
-    font-size: 1.4rem;
-    font-weight: 700;
-    color: #f1f5f9;
-    display: flex; align-items: center; justify-content: center;
-    cursor: pointer;
-    transition: background 0.1s, transform 0.1s;
-    user-select: none;
-    -webkit-user-select: none;
-    active: scale(0.95);
-  }
-  .numpad-btn:active { background: #334155; transform: scale(0.93); }
-  .numpad-btn.action { background: #1d4ed8; border-color: #3b82f6; }
-  .numpad-btn.action:active { background: #1e40af; }
-  .numpad-btn.danger { background: #7f1d1d; border-color: #ef4444; }
-  .numpad-btn.danger:active { background: #991b1b; }
-  .numpad-btn.save { background: #065f46; border-color: #10b981; font-size: 1rem; }
-  .numpad-btn.save:active { background: #064e3b; }
+/* ── Numpad ── */
+.nk{ background:#151e35; border:1px solid #1e3058; border-radius:10px;
+     display:flex; align-items:center; justify-content:center;
+     font-size:1.35rem; font-weight:800; color:#f1f5f9; cursor:pointer;
+     user-select:none; -webkit-user-select:none; transition:background .08s,transform .08s; }
+.nk:active{ background:#1e3058; transform:scale(.92); }
+.nk.blue{ background:#1a3875; border-color:#2563eb; }
+.nk.blue:active{ background:#1e40af; }
+.nk.red{ background:#4c1010; border-color:#dc2626; }
+.nk.red:active{ background:#7f1d1d; }
+.nk.green{ background:#064e3b; border-color:#10b981; font-size:.9rem; }
+.nk.green:active{ background:#065f46; }
 
-  .field-active { border-color: #3b82f6 !important; box-shadow: 0 0 0 2px rgba(59,130,246,0.4); }
-  .field-locked { opacity: 0.4; pointer-events: none; }
+/* ── Field ── */
+.field-box{ background:#0f172a; border:2px solid #1e3058; border-radius:12px;
+            text-align:center; font-size:1.6rem; font-weight:900; color:#fff;
+            cursor:pointer; transition:border-color .15s,box-shadow .15s; }
+.field-box.active{ border-color:#3b82f6;
+  box-shadow:0 0 0 3px rgba(59,130,246,.35);
+  animation:glow 1.6s ease-in-out infinite; }
+.field-box.locked{ opacity:.35; pointer-events:none; }
 
-  @keyframes pulse-border {
-    0%, 100% { box-shadow: 0 0 0 2px rgba(59,130,246,0.4); }
-    50% { box-shadow: 0 0 0 4px rgba(59,130,246,0.7); }
-  }
-  .pulse { animation: pulse-border 1.5s ease-in-out infinite; }
+@keyframes glow{
+  0%,100%{ box-shadow:0 0 0 3px rgba(59,130,246,.3); }
+  50%     { box-shadow:0 0 0 5px rgba(59,130,246,.6); }
+}
 
-  .badge { display: inline-flex; align-items: center; padding: 2px 8px; border-radius: 9999px; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; }
+/* ── Tab bar ── */
+.tab{ flex:1; padding:6px 2px; font-size:.6rem; font-weight:800;
+      letter-spacing:.04em; border-radius:8px; cursor:pointer;
+      color:#64748b; text-align:center; transition:background .15s,color .15s; }
+.tab.on{ background:#1d4ed8; color:#fff; }
 
-  ::-webkit-scrollbar { display: none; }
+/* ── Selects & inputs ── */
+select,input[type=text],input[type=password]{
+  -webkit-appearance:none; appearance:none;
+  background:#0f172a; border:1px solid #1e3058; border-radius:8px;
+  color:#f1f5f9; font-size:.85rem; padding:9px 11px; width:100%; outline:none; }
+select option{ background:#0f172a; color:#f1f5f9; }
+select:focus,input:focus{ border-color:#3b82f6; }
 
-  .tab-btn { flex: 1; padding: 8px 4px; text-align: center; font-size: 0.65rem; font-weight: 700; letter-spacing: 0.05em; border-radius: 8px; cursor: pointer; transition: background 0.15s, color 0.15s; color: #94a3b8; }
-  .tab-btn.active { background: #1d4ed8; color: #fff; }
+/* ── Modal ── */
+.modal-bg{ position:fixed; inset:0; background:rgba(0,0,0,.85);
+           z-index:100; display:flex; align-items:center;
+           justify-content:center; padding:14px; }
+.modal-bg.off{ display:none!important; }
+.modal-box{ background:#121929; border:1px solid #1e3058; border-radius:16px;
+            width:100%; max-width:360px; padding:18px;
+            max-height:88vh; overflow-y:auto; }
 
-  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.85); z-index: 100; display: flex; align-items: center; justify-content: center; padding: 16px; }
-  .modal-overlay.hidden { display: none !important; }
-  .modal-box { background: #1e293b; border: 1px solid #334155; border-radius: 16px; width: 100%; max-width: 360px; padding: 20px; }
+/* ── Report tables ── */
+.rt{ width:100%; border-collapse:collapse; font-size:.72rem; }
+.rt th{ background:#0e2044; color:#93c5fd; padding:5px 7px; text-align:left; }
+.rt td{ padding:4px 7px; border-bottom:1px solid #1e293b; color:#e2e8f0; }
+.rt tr:nth-child(even) td{ background:rgba(255,255,255,.03); }
 
-  input[type=text], input[type=password], select {
-    -webkit-appearance: none; appearance: none;
-    background: #0f172a; border: 1px solid #334155; border-radius: 8px;
-    color: #f1f5f9; font-size: 0.9rem; padding: 10px 12px; width: 100%;
-    outline: none;
-  }
-  input:focus, select:focus { border-color: #3b82f6; }
+/* ── Toast ── */
+.toast{ position:fixed; bottom:72px; left:50%; transform:translateX(-50%);
+        background:#065f46; color:#d1fae5; padding:7px 18px;
+        border-radius:999px; font-size:.78rem; font-weight:700;
+        z-index:200; opacity:0; transition:opacity .3s; white-space:nowrap; }
+.toast.show{ opacity:1; }
 
-  .report-table { width: 100%; border-collapse: collapse; font-size: 0.75rem; }
-  .report-table th { background: #1e3a5f; color: #93c5fd; padding: 6px 8px; text-align: left; }
-  .report-table td { padding: 5px 8px; border-bottom: 1px solid #1e293b; color: #e2e8f0; }
-  .report-table tr:nth-child(even) td { background: #0f172a40; }
+/* ── Scroll inside report ── */
+#rep-body{ overflow-y:auto; }
 
-  .toastbar {
-    position: fixed; bottom: 80px; left: 50%; transform: translateX(-50%);
-    background: #065f46; color: #d1fae5; padding: 8px 20px;
-    border-radius: 9999px; font-size: 0.8rem; font-weight: 700;
-    z-index: 200; opacity: 0; transition: opacity 0.3s;
-    white-space: nowrap;
-  }
-  .toastbar.show { opacity: 1; }
+::-webkit-scrollbar{ width:4px; }
+::-webkit-scrollbar-track{ background:transparent; }
+::-webkit-scrollbar-thumb{ background:#1e3058; border-radius:4px; }
 </style>
 </head>
 <body>
+<div id="toast" class="toast"></div>
 
-<!-- ===================== TOAST ===================== -->
-<div id="toastbar" class="toastbar"></div>
+<!-- ══════════════════════════════════════════════
+     SCREEN 1 — Welcome / User + Shift
+     ══════════════════════════════════════════════ -->
+<div id="s-welcome" class="screen">
+  <div class="flex flex-col h-full justify-center px-5 gap-5">
+    <div class="text-center">
+      <div class="text-5xl mb-2">🏭</div>
+      <h1 class="text-white font-black text-2xl">Control de Inventario</h1>
+      <p class="text-slate-400 text-sm mt-1">Selecciona encargado y turno</p>
+    </div>
 
-<!-- ===================== SCREEN: USER SELECT ===================== -->
-<div id="screen-user" class="screen">
-  <div class="flex flex-col h-full justify-center px-6 gap-6">
-    <div class="text-center">
-      <div class="text-4xl mb-2">🏭</div>
-      <h1 class="text-white font-black text-2xl tracking-tight">Control de Inventario</h1>
-      <p class="text-slate-400 text-sm mt-1">Selecciona quién estás operando</p>
+    <div>
+      <p class="text-slate-400 text-xs font-bold mb-2 uppercase tracking-widest">Encargado</p>
+      <div id="user-btns" class="flex flex-col gap-3"></div>
     </div>
-    <div id="user-buttons" class="flex flex-col gap-4">
-      <!-- Generado dinámicamente -->
+
+    <div>
+      <p class="text-slate-400 text-xs font-bold mb-2 uppercase tracking-widest">Turno</p>
+      <div class="flex gap-3">
+        <button id="btn-dia"
+          onclick="selectShift('Día')"
+          class="flex-1 py-4 rounded-2xl text-base font-black border-2 border-slate-600 bg-slate-800 text-white">
+          ☀️ Turno Día
+        </button>
+        <button id="btn-noche"
+          onclick="selectShift('Noche')"
+          class="flex-1 py-4 rounded-2xl text-base font-black border-2 border-slate-600 bg-slate-800 text-white">
+          🌙 Turno Noche
+        </button>
+      </div>
     </div>
-    <div class="text-center">
-      <p class="text-slate-500 text-xs">Turno activo: <span id="user-shift-label" class="text-slate-300 font-bold"></span></p>
-    </div>
+
+    <button id="btn-enter" onclick="enterApp()"
+      class="w-full py-4 rounded-2xl text-base font-black bg-blue-700 text-white opacity-40" disabled>
+      Iniciar Captura →
+    </button>
   </div>
 </div>
 
-<!-- ===================== SCREEN: MAIN ===================== -->
-<div id="screen-main" class="screen hidden">
-  <!-- HEADER -->
-  <div class="flex items-center justify-between px-3 py-2 border-b border-slate-700/60 shrink-0">
+<!-- ══════════════════════════════════════════════
+     SCREEN 2 — Main Capture
+     ══════════════════════════════════════════════ -->
+<div id="s-main" class="screen off">
+
+  <!-- Header -->
+  <div class="flex items-center justify-between px-3 py-2 border-b border-slate-800 shrink-0">
     <div>
-      <p class="text-slate-400 text-xs">Turno: <span id="hdr-shift" class="text-blue-400 font-bold"></span></p>
-      <p class="text-white font-black text-sm leading-tight" id="hdr-user"></p>
+      <p class="text-slate-400 text-xs">Turno <span id="hdr-shift" class="text-blue-400 font-bold"></span></p>
+      <p class="text-white font-black text-sm" id="hdr-user"></p>
     </div>
-    <div class="flex items-center gap-2">
-      <button onclick="openReport()" class="bg-slate-700 text-white text-xs font-bold px-3 py-1.5 rounded-lg">📊 Ver</button>
-      <button onclick="openAdminModal()" class="bg-slate-700 text-slate-300 text-xs font-bold px-2 py-1.5 rounded-lg">⚙️</button>
+    <div class="flex gap-2">
+      <button onclick="openReport()" class="bg-slate-800 text-white text-xs font-bold px-3 py-1.5 rounded-lg">📊</button>
+      <button onclick="openPinModal()" class="bg-slate-800 text-slate-300 text-xs font-bold px-2 py-1.5 rounded-lg">⚙️</button>
     </div>
   </div>
 
-  <!-- TAB BAR POLVORINES -->
+  <!-- Polvorín tabs -->
   <div class="flex gap-1 px-3 pt-2 pb-1 shrink-0">
-    <button class="tab-btn active" id="tab-p1" onclick="switchPolvorin(1)">POL. 1<br><span class="opacity-70">Iniciadores</span></button>
-    <button class="tab-btn" id="tab-p2" onclick="switchPolvorin(2)">POL. 2<br><span class="opacity-70">Alto Explos.</span></button>
-    <button class="tab-btn" id="tab-p3" onclick="switchPolvorin(3)">POL. 3<br><span class="opacity-70">Emulsión</span></button>
+    <button class="tab on" id="tab1" onclick="switchPol(1)">POL. 1</button>
+    <button class="tab"    id="tab2" onclick="switchPol(2)">POL. 2</button>
+    <button class="tab"    id="tab3" onclick="switchPol(3)">POL. 3</button>
   </div>
 
-  <!-- ARTICLE SELECTOR -->
+  <!-- Article selector -->
   <div class="px-3 py-1 shrink-0">
-    <select id="article-select" onchange="onArticleSelected()" class="text-sm">
+    <select id="art-sel" onchange="onArtChange()">
       <option value="">— Selecciona un artículo —</option>
     </select>
   </div>
 
-  <!-- COUNT FIELDS -->
-  <div class="px-3 py-1 flex gap-2 shrink-0" id="fields-area">
-    <div class="flex-1" id="field-a-wrap">
-      <p class="text-slate-400 text-xs mb-1" id="label-field-a">CAJAS</p>
-      <div id="display-a" class="bg-slate-800 border-2 border-slate-600 rounded-xl text-center py-2 text-2xl font-black text-white cursor-pointer field-locked" onclick="setActiveField('a')">0</div>
+  <!-- Fields row -->
+  <div class="px-3 py-1 flex gap-2 shrink-0" id="fields-row">
+
+    <div class="flex-1" id="fA-wrap">
+      <p class="text-slate-400 text-xs mb-1" id="lbl-A">CAJAS</p>
+      <div class="field-box locked py-2" id="fA" onclick="setActive('A')">0</div>
     </div>
-    <div class="flex-1" id="field-b-wrap">
-      <p class="text-slate-400 text-xs mb-1" id="label-field-b">PIEZAS SUELTAS</p>
-      <div id="display-b" class="bg-slate-800 border-2 border-slate-600 rounded-xl text-center py-2 text-2xl font-black text-white cursor-pointer field-locked" onclick="setActiveField('b')">0</div>
+
+    <div class="flex-1" id="fB-wrap">
+      <p class="text-slate-400 text-xs mb-1" id="lbl-B">PIEZAS SUELTAS</p>
+      <div class="field-box locked py-2" id="fB" onclick="setActive('B')">0</div>
     </div>
-    <div class="w-24" id="field-total-wrap">
-      <p class="text-slate-400 text-xs mb-1">TOTAL NETO</p>
-      <div class="bg-slate-900 border-2 border-slate-700 rounded-xl text-center py-2 text-xl font-black text-emerald-400">
-        <span id="total-display">0</span>
-      </div>
-      <p class="text-slate-500 text-xs text-center mt-0.5">piezas</p>
+
+    <div class="w-20 shrink-0">
+      <p class="text-slate-400 text-xs mb-1" id="lbl-total">TOTAL</p>
+      <div class="bg-slate-900 border-2 border-slate-700 rounded-xl text-center py-2 font-black text-emerald-400 text-base" id="total-box">0</div>
+      <p class="text-slate-500 text-xs text-center mt-0.5" id="total-unit"></p>
     </div>
+
   </div>
 
-  <!-- NUMPAD -->
+  <!-- Numpad -->
   <div class="flex-1 px-3 pt-1 pb-1 min-h-0">
-    <div class="grid grid-cols-4 gap-1.5 h-full" id="numpad">
-      <!-- Row quick adjust -->
-      <button class="numpad-btn action" onclick="quickAdjust(-5)">−5</button>
-      <button class="numpad-btn action" onclick="quickAdjust(-1)">−1</button>
-      <button class="numpad-btn action" onclick="quickAdjust(+1)">+1</button>
-      <button class="numpad-btn action" onclick="quickAdjust(+5)">+5</button>
-      <!-- Row 7 8 9 -->
-      <button class="numpad-btn" onclick="numpadInput('7')">7</button>
-      <button class="numpad-btn" onclick="numpadInput('8')">8</button>
-      <button class="numpad-btn" onclick="numpadInput('9')">9</button>
-      <button class="numpad-btn danger" onclick="numpadClear()">C</button>
-      <!-- Row 4 5 6 -->
-      <button class="numpad-btn" onclick="numpadInput('4')">4</button>
-      <button class="numpad-btn" onclick="numpadInput('5')">5</button>
-      <button class="numpad-btn" onclick="numpadInput('6')">6</button>
-      <button class="numpad-btn danger" onclick="numpadDel()">⌫</button>
-      <!-- Row 1 2 3 -->
-      <button class="numpad-btn" onclick="numpadInput('1')">1</button>
-      <button class="numpad-btn" onclick="numpadInput('2')">2</button>
-      <button class="numpad-btn" onclick="numpadInput('3')">3</button>
-      <button class="numpad-btn save" onclick="saveEntry()" style="grid-row: span 2;">✔<br>GUARDAR</button>
-      <!-- Row 0 -->
-      <button class="numpad-btn col-span-2" onclick="numpadInput('0')">0</button>
-      <button class="numpad-btn" onclick="nextField()">TAB ▶</button>
+    <div class="grid grid-cols-4 gap-1.5 h-full">
+      <div class="nk blue" onclick="adj(-5)">−5</div>
+      <div class="nk blue" onclick="adj(-1)">−1</div>
+      <div class="nk blue" onclick="adj(+1)">+1</div>
+      <div class="nk blue" onclick="adj(+5)">+5</div>
+
+      <div class="nk" onclick="kp('7')">7</div>
+      <div class="nk" onclick="kp('8')">8</div>
+      <div class="nk" onclick="kp('9')">9</div>
+      <div class="nk red" onclick="kc()">C</div>
+
+      <div class="nk" onclick="kp('4')">4</div>
+      <div class="nk" onclick="kp('5')">5</div>
+      <div class="nk" onclick="kp('6')">6</div>
+      <div class="nk red" onclick="kd()">⌫</div>
+
+      <div class="nk" onclick="kp('1')">1</div>
+      <div class="nk" onclick="kp('2')">2</div>
+      <div class="nk" onclick="kp('3')">3</div>
+      <div class="nk green" onclick="saveEntry()" style="grid-row:span 2">✔<br><span style="font-size:.7rem">GUARDAR</span></div>
+
+      <div class="nk col-span-2" onclick="kp('0')">0</div>
+      <div class="nk blue" onclick="nextField()">TAB▶</div>
     </div>
   </div>
 
-  <!-- LAST SAVED INDICATOR -->
+  <!-- Status line -->
   <div class="px-3 pb-2 shrink-0">
-    <p class="text-slate-500 text-xs text-center" id="last-saved-txt"></p>
+    <p class="text-slate-500 text-xs text-center" id="status-txt"></p>
   </div>
 </div>
 
-<!-- ===================== SCREEN: REPORT ===================== -->
-<div id="screen-report" class="screen hidden">
-  <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-700/60 shrink-0">
-    <button onclick="closeReport()" class="text-slate-400 text-lg font-bold">←</button>
+<!-- ══════════════════════════════════════════════
+     SCREEN 3 — Report
+     ══════════════════════════════════════════════ -->
+<div id="s-report" class="screen off">
+  <div class="flex items-center gap-3 px-4 py-3 border-b border-slate-800 shrink-0">
+    <button onclick="closeReport()" class="text-slate-400 text-lg">←</button>
     <div>
-      <h2 class="text-white font-black text-base">Resumen de Turno</h2>
-      <p class="text-slate-400 text-xs" id="report-shift-label"></p>
+      <h2 class="text-white font-black text-base">Reporte de Inventario</h2>
+      <p class="text-slate-400 text-xs" id="rep-hdr"></p>
     </div>
   </div>
-  <div class="flex-1 overflow-y-auto px-3 py-3" id="report-content"></div>
-  <div class="px-3 py-2 border-t border-slate-700/60 flex gap-2 shrink-0">
-    <button onclick="downloadPDF()" class="flex-1 bg-blue-700 text-white font-bold text-sm py-3 rounded-xl">⬇ PDF</button>
-    <button onclick="copyEmail()" class="flex-1 bg-slate-700 text-white font-bold text-sm py-3 rounded-xl">📋 Correo</button>
-    <button onclick="closeShift()" class="flex-1 bg-red-900 text-red-200 font-bold text-sm py-3 rounded-xl">🔒 Cerrar</button>
+  <div id="rep-body" class="flex-1 px-3 py-3"></div>
+  <div class="flex gap-2 px-3 py-2 border-t border-slate-800 shrink-0">
+    <button onclick="dlPDF()"    class="flex-1 bg-blue-800 text-white font-bold text-xs py-3 rounded-xl">⬇ PDF</button>
+    <button onclick="cpEmail()"  class="flex-1 bg-slate-700 text-white font-bold text-xs py-3 rounded-xl">📋 Correo</button>
+    <button onclick="closeShift()" class="flex-1 bg-red-900 text-red-200 font-bold text-xs py-3 rounded-xl">🔒 Cerrar</button>
   </div>
 </div>
 
-<!-- ===================== MODAL: ADMIN ===================== -->
-<div id="modal-admin-pin" class="modal-overlay hidden">
+<!-- ══════════════════════════════════════════════
+     MODAL — PIN
+     ══════════════════════════════════════════════ -->
+<div id="m-pin" class="modal-bg off">
   <div class="modal-box">
     <h3 class="text-white font-black text-lg mb-4 text-center">🔐 Administración</h3>
-    <p class="text-slate-400 text-sm mb-3 text-center">Ingresa el PIN de acceso</p>
-    <input type="password" id="admin-pin-input" maxlength="6" placeholder="••••" class="text-center text-2xl tracking-widest mb-4">
+    <input type="password" id="pin-input" maxlength="6" placeholder="••••"
+      class="text-center text-2xl tracking-widest mb-4">
     <div class="flex gap-3">
-      <button onclick="closeAdminPin()" class="flex-1 bg-slate-700 text-white font-bold py-2 rounded-xl">Cancelar</button>
-      <button onclick="verifyPin()" class="flex-1 bg-blue-700 text-white font-bold py-2 rounded-xl">Ingresar</button>
+      <button onclick="closePinModal()" class="flex-1 bg-slate-700 text-white font-bold py-2 rounded-xl">Cancelar</button>
+      <button onclick="checkPin()"      class="flex-1 bg-blue-700 text-white font-bold py-2 rounded-xl">Ingresar</button>
     </div>
   </div>
 </div>
 
-<!-- ===================== MODAL: ADMIN PANEL ===================== -->
-<div id="modal-admin" class="modal-overlay hidden">
-  <div class="modal-box" style="max-height:90vh; overflow-y:auto;">
+<!-- ══════════════════════════════════════════════
+     MODAL — ADMIN
+     ══════════════════════════════════════════════ -->
+<div id="m-admin" class="modal-bg off">
+  <div class="modal-box">
     <div class="flex items-center justify-between mb-4">
       <h3 class="text-white font-black text-base">⚙️ Catálogo Maestro</h3>
-      <button onclick="closeAdmin()" class="text-slate-400 text-xl font-bold">✕</button>
+      <button onclick="closeAdmin()" class="text-slate-400 text-xl">✕</button>
     </div>
-    <!-- User names config -->
+
+    <!-- User names -->
     <div class="mb-4 p-3 bg-slate-900 rounded-xl">
-      <p class="text-slate-300 font-bold text-xs mb-2">NOMBRES DE USUARIOS</p>
-      <div class="flex flex-col gap-2">
-        <input type="text" id="cfg-user1" placeholder="Nombre Usuario 1" class="text-sm">
-        <input type="text" id="cfg-user2" placeholder="Nombre Usuario 2" class="text-sm">
-        <input type="text" id="cfg-user3" placeholder="Nombre Usuario 3" class="text-sm">
-      </div>
-      <button onclick="saveUserNames()" class="mt-2 w-full bg-blue-700 text-white font-bold text-sm py-2 rounded-xl">Guardar Nombres</button>
+      <p class="text-slate-300 font-bold text-xs mb-2">NOMBRES DE ENCARGADOS</p>
+      <input type="text" id="cfg-u1" placeholder="Encargado 1" class="mb-2">
+      <input type="text" id="cfg-u2" placeholder="Encargado 2" class="mb-2">
+      <input type="text" id="cfg-u3" placeholder="Encargado 3" class="mb-2">
+      <button onclick="saveUsers()" class="w-full bg-blue-700 text-white font-bold text-sm py-2 rounded-xl">Guardar Nombres</button>
     </div>
+
     <!-- Add article -->
     <div class="mb-4 p-3 bg-slate-900 rounded-xl">
       <p class="text-slate-300 font-bold text-xs mb-2">AGREGAR ARTÍCULO</p>
-      <input type="text" id="new-art-name" placeholder="Nombre del artículo" class="text-sm mb-2">
-      <div class="flex gap-2 mb-2">
-        <select id="new-art-polvorin" class="text-sm flex-1">
-          <option value="1">Polvorín 1 - Iniciadores</option>
-          <option value="2">Polvorín 2 - Alto Explosivo</option>
-          <option value="3">Polvorín 3 - Emulsión</option>
-        </select>
-        <input type="text" id="new-art-pxc" placeholder="Pzas/Caja" class="text-sm w-24" oninput="this.value=this.value.replace(/\D/g,'')">
+      <input type="text" id="na-name" placeholder="Nombre del artículo" class="mb-2">
+      <select id="na-pol" class="mb-2">
+        <option value="1">Polvorín 1</option>
+        <option value="2">Polvorín 2</option>
+        <option value="3">Polvorín 3</option>
+      </select>
+      <select id="na-tipo" class="mb-2" onchange="onTipoChange('na')">
+        <option value="cajas_piezas">Cajas + Piezas (Pol.1 / Alto Exp.)</option>
+        <option value="sacos">Sacos (Agentes de Voladura)</option>
+        <option value="metros">Metros (Cordón Detonante)</option>
+        <option value="emulsion">Emulsión (Pol.3)</option>
+      </select>
+      <div id="na-equiv-wrap" class="mb-2">
+        <input type="text" id="na-equiv" placeholder="Equivalencia (pzas/rollo/metros por unidad A)"
+          oninput="this.value=this.value.replace(/[^0-9.]/g,'')">
       </div>
-      <button onclick="addArticle()" class="w-full bg-emerald-700 text-white font-bold text-sm py-2 rounded-xl">+ Agregar</button>
+      <button onclick="addArt()" class="w-full bg-emerald-700 text-white font-bold text-sm py-2 rounded-xl">+ Agregar</button>
     </div>
+
+    <!-- CSV Import -->
+    <div class="mb-4 p-3 bg-slate-900 rounded-xl">
+      <p class="text-slate-300 font-bold text-xs mb-2">IMPORTAR CATÁLOGO (.CSV)</p>
+      <p class="text-slate-500 text-xs mb-2">Formato: nombre,polvorin,tipo,equivalencia</p>
+      <input type="file" id="csv-file" accept=".csv"
+        class="text-slate-300 text-xs mb-2 w-full" onchange="importCSV(event)">
+    </div>
+
     <!-- Article list -->
     <div>
       <p class="text-slate-300 font-bold text-xs mb-2">ARTÍCULOS REGISTRADOS</p>
-      <div id="admin-article-list" class="flex flex-col gap-2"></div>
+      <div id="art-list" class="flex flex-col gap-2"></div>
     </div>
   </div>
 </div>
 
-<!-- ===================== MODAL: EDIT ARTICLE ===================== -->
-<div id="modal-edit" class="modal-overlay hidden">
+<!-- ══════════════════════════════════════════════
+     MODAL — EDIT ARTICLE
+     ══════════════════════════════════════════════ -->
+<div id="m-edit" class="modal-bg off">
   <div class="modal-box">
     <h3 class="text-white font-black text-base mb-4">Editar Artículo</h3>
-    <input type="hidden" id="edit-art-id">
-    <input type="text" id="edit-art-name" placeholder="Nombre" class="text-sm mb-2">
-    <select id="edit-art-polvorin" class="text-sm mb-2">
-      <option value="1">Polvorín 1 - Iniciadores</option>
-      <option value="2">Polvorín 2 - Alto Explosivo</option>
-      <option value="3">Polvorín 3 - Emulsión</option>
+    <input type="hidden" id="ea-id">
+    <input type="text"   id="ea-name"  placeholder="Nombre"  class="mb-2">
+    <select id="ea-pol" class="mb-2">
+      <option value="1">Polvorín 1</option>
+      <option value="2">Polvorín 2</option>
+      <option value="3">Polvorín 3</option>
     </select>
-    <input type="text" id="edit-art-pxc" placeholder="Piezas por Caja" class="text-sm mb-4" oninput="this.value=this.value.replace(/\D/g,'')">
+    <select id="ea-tipo" class="mb-2" onchange="onTipoChange('ea')">
+      <option value="cajas_piezas">Cajas + Piezas</option>
+      <option value="sacos">Sacos</option>
+      <option value="metros">Metros</option>
+      <option value="emulsion">Emulsión</option>
+    </select>
+    <div id="ea-equiv-wrap" class="mb-4">
+      <input type="text" id="ea-equiv" placeholder="Equivalencia"
+        oninput="this.value=this.value.replace(/[^0-9.]/g,'')">
+    </div>
     <div class="flex gap-3">
-      <button onclick="closeEditModal()" class="flex-1 bg-slate-700 text-white font-bold py-2 rounded-xl">Cancelar</button>
-      <button onclick="saveEditArticle()" class="flex-1 bg-blue-700 text-white font-bold py-2 rounded-xl">Guardar</button>
+      <button onclick="closeEdit()" class="flex-1 bg-slate-700 text-white font-bold py-2 rounded-xl">Cancelar</button>
+      <button onclick="saveEdit()"  class="flex-1 bg-blue-700 text-white font-bold py-2 rounded-xl">Guardar</button>
     </div>
   </div>
 </div>
 
-<!-- ===================== MODAL: DRAFT RESTORE ===================== -->
-<div id="modal-draft" class="modal-overlay hidden">
+<!-- ══════════════════════════════════════════════
+     MODAL — DRAFT RESTORE
+     ══════════════════════════════════════════════ -->
+<div id="m-draft" class="modal-bg off">
   <div class="modal-box">
     <h3 class="text-white font-black text-base mb-2 text-center">📝 Borrador encontrado</h3>
-    <p class="text-slate-300 text-sm text-center mb-4">Hay datos sin guardar de una sesión anterior. ¿Deseas restaurarlos?</p>
+    <p class="text-slate-300 text-sm text-center mb-4">
+      Hay datos sin guardar de una sesión anterior. ¿Deseas restaurarlos?
+    </p>
     <div class="flex gap-3">
-      <button onclick="discardDraft()" class="flex-1 bg-slate-700 text-white font-bold py-2 rounded-xl">Descartar</button>
-      <button onclick="restoreDraft()" class="flex-1 bg-blue-700 text-white font-bold py-2 rounded-xl">Restaurar</button>
+      <button onclick="draftDiscard()" class="flex-1 bg-slate-700 text-white font-bold py-2 rounded-xl">Descartar</button>
+      <button onclick="draftRestore()" class="flex-1 bg-blue-700 text-white font-bold py-2 rounded-xl">Restaurar</button>
     </div>
   </div>
 </div>
 
+<!-- ════════════════════════ SCRIPT ════════════════════════ -->
 <script>
-// ============================================================
-//  STATE
-// ============================================================
-let STATE = {
-  activeUser: null,      // { id, name }
-  activePolvorin: 1,     // 1 | 2 | 3
-  activeField: 'a',      // 'a' | 'b'
-  selectedArticle: null, // article object
-  fieldA: 0,
-  fieldB: 0,
-  articles: [],          // from Firestore
-  entries: {},           // { articleId: { fieldA, fieldB, user, ts } } for current shift
-  shiftId: null,
-  shiftName: '',
-  userNames: ['Usuario 1', 'Usuario 2', 'Usuario 3'],
-  unsubArticles: null,
-  unsubEntries: null,
+// ─────────────────────────────────────────
+//  CONSTANTS
+// ─────────────────────────────────────────
+const PIN = "1234";
+
+const POL_NAMES = { 1:"POLVORÍN 1", 2:"POLVORÍN 2", 3:"POLVORÍN 3" };
+
+const TIPO_LABELS = {
+  cajas_piezas : { A:"CAJAS",            B:"PIEZAS SUELTAS",     total:"Total Físico", unit:"pzas" },
+  sacos        : { A:"CANTIDAD DE SACOS", B:null,                 total:"Peso Total",   unit:"Ton"  },
+  metros       : { A:"CAJAS / ROLLOS",    B:"METROS SUELTOS",     total:"Total Físico", unit:"m"    },
+  emulsion     : { A:"CONT. LLENOS (1T)", B:"CONT. VACÍOS",       total:"Peso Total",   unit:"Ton"  },
 };
 
-const ADMIN_PIN = "1234";
-const POLVORIN_NAMES = { 1: "Polvorín 1 - Iniciadores", 2: "Polvorín 2 - Alto Explosivo", 3: "Polvorín 3 - Emulsión" };
+// ─────────────────────────────────────────
+//  STATE
+// ─────────────────────────────────────────
+const S = {
+  user   : null,   // string
+  shift  : null,   // "Día" | "Noche"
+  shiftId: null,   // "YYYYMMDD-D" | "YYYYMMDD-N"
+  pol    : 1,
+  art    : null,   // article object
+  active : 'A',   // 'A' | 'B'
+  vA     : 0,
+  vB     : 0,
+  articles: [],
+  entries : {},    // { artId: entry }
+  users   : ["Encargado 1","Encargado 2","Encargado 3"],
+  unsub   : [],
+};
 
-// ============================================================
-//  FIREBASE HELPERS
-// ============================================================
-function db() { return window._db; }
-function fs() { return window._fsOps; }
+// ─────────────────────────────────────────
+//  FIREBASE WRAPPERS
+// ─────────────────────────────────────────
+const db  = () => window._db;
+const fso = () => window._fs;
 
 async function fsSet(path, data) {
-  const parts = path.split('/');
+  const p = path.split('/');
   let ref;
-  if (parts.length === 2) ref = fs().doc(db(), parts[0], parts[1]);
-  else if (parts.length === 4) ref = fs().doc(db(), parts[0], parts[1], parts[2], parts[3]);
-  await fs().setDoc(ref, data, { merge: true });
+  if(p.length===2) ref = fso().doc(db(),p[0],p[1]);
+  else ref = fso().doc(db(),p[0],p[1],p[2],p[3]);
+  await fso().setDoc(ref, data, {merge:true});
 }
-
 async function fsGet(path) {
-  const parts = path.split('/');
+  const p = path.split('/');
   let ref;
-  if (parts.length === 2) ref = fs().doc(db(), parts[0], parts[1]);
-  else if (parts.length === 4) ref = fs().doc(db(), parts[0], parts[1], parts[2], parts[3]);
-  const snap = await fs().getDoc(ref);
-  return snap.exists() ? snap.data() : null;
+  if(p.length===2) ref = fso().doc(db(),p[0],p[1]);
+  else ref = fso().doc(db(),p[0],p[1],p[2],p[3]);
+  const s = await fso().getDoc(ref);
+  return s.exists() ? s.data() : null;
+}
+async function fsDel(path) {
+  const p = path.split('/');
+  let ref = fso().doc(db(),p[0],p[1]);
+  await fso().deleteDoc(ref);
+}
+function fsListen(col, cb) {
+  const ref = fso().collection(db(), ...col.split('/'));
+  return fso().onSnapshot(ref, cb);
 }
 
-async function fsDelete(path) {
-  const parts = path.split('/');
-  let ref;
-  if (parts.length === 2) ref = fs().doc(db(), parts[0], parts[1]);
-  await fs().deleteDoc(ref);
-}
-
-function fsListen(colPath, callback) {
-  const parts = colPath.split('/');
-  let colRef;
-  if (parts.length === 2) colRef = fs().collection(db(), parts[0], parts[1], 'items'); // handled externally
-  // Use direct collection reference
-  return null;
-}
-
-// ============================================================
-//  INIT
-// ============================================================
-document.addEventListener("firebase-ready", async () => {
+// ─────────────────────────────────────────
+//  BOOT
+// ─────────────────────────────────────────
+document.addEventListener("fb-ready", async () => {
   await loadConfig();
-  determineShift();
-  await loadEntries();
   subscribeArticles();
-  subscribeEntries();
   checkDraft();
-  renderUserScreen();
+  renderUserBtns();
 });
 
-// Fallback if firebase not configured
+// Render buttons immediately so the UI is always interactive,
+// even before Firebase finishes connecting (or if it never does).
+// Multiple redundant triggers in case one fires before listeners attach.
+if (document.readyState === 'loading') {
+  document.addEventListener("DOMContentLoaded", renderUserBtns);
+} else {
+  renderUserBtns(); // DOM already parsed by the time this script ran
+}
+
 window.addEventListener("load", () => {
-  setTimeout(() => {
-    if (!window._firebaseReady) {
-      showToast("⚠️ Firebase no configurado. Modo demo.", 4000);
-      STATE.userNames = ['Operador A', 'Operador B', 'Operador C'];
-      determineShift();
-      renderUserScreen();
-      show('screen-user');
+  renderUserBtns(); // final safety net
+  setTimeout(()=>{
+    if(!window._fbReady){
+      showToast("⚠️ Firebase no configurado — modo demo", 4000);
     }
-  }, 3000);
+  }, 2500);
 });
 
+// ─────────────────────────────────────────
+//  CONFIG
+// ─────────────────────────────────────────
 async function loadConfig() {
   try {
-    const cfg = await fsGet('config/general');
-    if (cfg) {
-      if (cfg.userNames) STATE.userNames = cfg.userNames;
-    }
-  } catch(e) { console.warn("loadConfig:", e); }
+    const c = await fsGet('config/general');
+    if(c?.users) S.users = c.users;
+  } catch(e){ console.warn(e); }
 }
 
-function determineShift() {
-  const h = new Date().getHours();
-  let name, id;
-  if (h >= 6 && h < 14) { name = "Matutino"; id = "M"; }
-  else if (h >= 14 && h < 22) { name = "Vespertino"; id = "V"; }
-  else { name = "Nocturno"; id = "N"; }
+async function saveUsers() {
+  const u = [1,2,3].map(i => document.getElementById(`cfg-u${i}`).value.trim() || `Encargado ${i}`);
+  S.users = u;
+  try {
+    if(window._fbReady) await fsSet('config/general',{users:u});
+    showToast("✔ Nombres guardados");
+    renderUserBtns();
+  } catch(e){ showToast("Error: "+e.message); }
+}
 
+// ─────────────────────────────────────────
+//  WELCOME SCREEN
+// ─────────────────────────────────────────
+function renderUserBtns() {
+  const c = document.getElementById('user-btns');
+  if(!c) return;
+  c.innerHTML = '';
+  const list = (S.users && S.users.length) ? S.users : ["Encargado 1","Encargado 2","Encargado 3"];
+  list.forEach((name,i) => {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.textContent = '👷 ' + name;
+    b.style.cssText = 'width:100%;padding:14px;border-radius:14px;font-size:1rem;font-weight:900;color:#fff;border:2px solid #475569;background:#1e293b;cursor:pointer;display:block;';
+    b.onclick = function(){ selectUser(name); };
+    c.appendChild(b);
+  });
+}
+
+function selectUser(name) {
+  S.user = name;
+  // Visual highlight
+  document.querySelectorAll('#user-btns button').forEach(b => {
+    b.style.borderColor = b.textContent.includes(name) ? '#3b82f6' : '#475569';
+    b.style.background  = b.textContent.includes(name) ? '#1d4ed8' : '#1e293b';
+  });
+  checkEnter();
+}
+
+function selectShift(s) {
+  S.shift = s;
+  document.getElementById('btn-dia').style.background   = s==='Día'   ? '#1d4ed8' : '#1e293b';
+  document.getElementById('btn-dia').style.borderColor  = s==='Día'   ? '#3b82f6' : '#475569';
+  document.getElementById('btn-noche').style.background = s==='Noche' ? '#1d4ed8' : '#1e293b';
+  document.getElementById('btn-noche').style.borderColor= s==='Noche' ? '#3b82f6' : '#475569';
+  checkEnter();
+}
+
+function checkEnter() {
+  const ok = S.user && S.shift;
+  const b = document.getElementById('btn-enter');
+  b.disabled = !ok;
+  b.style.opacity = ok ? '1' : '0.4';
+}
+
+function enterApp() {
+  if(!S.user || !S.shift) return;
   const today = new Date().toISOString().slice(0,10).replace(/-/g,'');
-  STATE.shiftId = `${today}-${id}`;
-  STATE.shiftName = name;
-
-  document.getElementById('user-shift-label').textContent = `${name} (${new Date().toLocaleDateString('es-MX')})`;
-  document.getElementById('hdr-shift').textContent = name;
+  S.shiftId = `${today}-${S.shift==='Día'?'D':'N'}`;
+  document.getElementById('hdr-shift').textContent = `Turno ${S.shift}`;
+  document.getElementById('hdr-user').textContent  = `👷 ${S.user}`;
+  loadShiftEntries().then(() => {
+    subscribeEntries();
+    switchPol(1);
+    show('s-main');
+  });
 }
 
+// ─────────────────────────────────────────
+//  ARTICLES
+// ─────────────────────────────────────────
 function subscribeArticles() {
-  if (!window._firebaseReady) return;
+  if(!window._fbReady) return;
   try {
-    const colRef = fs().collection(db(), 'articles');
-    STATE.unsubArticles = fs().onSnapshot(colRef, (snap) => {
-      STATE.articles = [];
-      snap.forEach(d => STATE.articles.push({ id: d.id, ...d.data() }));
-      STATE.articles.sort((a,b) => a.name.localeCompare(b.name));
-      renderArticleSelect();
-      if (document.getElementById('modal-admin').classList.contains('hidden') === false) {
-        renderAdminArticleList();
-      }
+    const ref = fso().collection(db(),'articles');
+    const unsub = fso().onSnapshot(ref, snap => {
+      S.articles = [];
+      snap.forEach(d => S.articles.push({id:d.id,...d.data()}));
+      S.articles.sort((a,b)=>a.name.localeCompare(b.name));
+      renderArtSelect();
+      renderArtList();
     });
-  } catch(e) { console.warn("subscribeArticles:", e); }
+    S.unsub.push(unsub);
+  } catch(e){ console.warn(e); }
 }
 
-async function loadEntries() {
-  if (!window._firebaseReady) return;
+function renderArtSelect() {
+  const sel = document.getElementById('art-sel');
+  const cur = sel.value;
+  const filtered = S.articles.filter(a => String(a.pol) === String(S.pol));
+  sel.innerHTML = '<option value="">— Selecciona un artículo —</option>' +
+    filtered.map(a => `<option value="${a.id}">${h(a.name)}</option>`).join('');
+  if(cur && filtered.find(a=>a.id===cur)) sel.value=cur;
+}
+
+// ─────────────────────────────────────────
+//  ENTRIES
+// ─────────────────────────────────────────
+async function loadShiftEntries() {
+  if(!window._fbReady) return;
   try {
-    const colRef = fs().collection(db(), 'shifts', STATE.shiftId, 'entries');
-    const snap = await fs().getDocs(colRef);
-    snap.forEach(d => { STATE.entries[d.id] = d.data(); });
-  } catch(e) { console.warn("loadEntries:", e); }
+    const ref = fso().collection(db(),'shifts',S.shiftId,'entries');
+    const snap = await fso().getDocs(ref);
+    snap.forEach(d => { S.entries[d.id] = d.data(); });
+  } catch(e){ console.warn(e); }
 }
 
 function subscribeEntries() {
-  if (!window._firebaseReady) return;
+  if(!window._fbReady) return;
   try {
-    const colRef = fs().collection(db(), 'shifts', STATE.shiftId, 'entries');
-    STATE.unsubEntries = fs().onSnapshot(colRef, (snap) => {
-      snap.forEach(d => { STATE.entries[d.id] = d.data(); });
-      updateLastSaved();
+    const ref = fso().collection(db(),'shifts',S.shiftId,'entries');
+    const unsub = fso().onSnapshot(ref, snap => {
+      snap.forEach(d => { S.entries[d.id] = d.data(); });
+      refreshStatus();
     });
-  } catch(e) { console.warn("subscribeEntries:", e); }
+    S.unsub.push(unsub);
+  } catch(e){ console.warn(e); }
 }
 
-// ============================================================
-//  USER SCREEN
-// ============================================================
-function renderUserScreen() {
-  const container = document.getElementById('user-buttons');
-  const users = STATE.userNames.map((n,i) => ({ id: i+1, name: n }));
-  container.innerHTML = '';
-  users.forEach(u => {
-    const btn = document.createElement('button');
-    btn.textContent = '👷 ' + u.name;
-    btn.style.cssText = 'width:100%;padding:22px 16px;border-radius:16px;font-size:1.25rem;font-weight:900;color:#fff;border:2px solid #475569;background:#1e293b;cursor:pointer;display:block;margin-bottom:4px;';
-    btn.addEventListener('click', function() { selectUser(u.id, u.name); });
-    container.appendChild(btn);
+// ─────────────────────────────────────────
+//  POLVORÍN SWITCH
+// ─────────────────────────────────────────
+function switchPol(p) {
+  S.pol = p;
+  S.art = null; S.vA = 0; S.vB = 0; S.active = 'A';
+  [1,2,3].forEach(i=>{
+    document.getElementById(`tab${i}`).classList.toggle('on', i===p);
   });
-  show('screen-user');
-}
-
-function selectUser(id, name) {
-  STATE.activeUser = { id, name };
-  document.getElementById('hdr-user').textContent = `👷 ${name}`;
-  show('screen-main');
-  renderArticleSelect();
-  updateFieldLabels();
-}
-
-// ============================================================
-//  MAIN SCREEN
-// ============================================================
-function switchPolvorin(p) {
-  STATE.activePolvorin = p;
-  STATE.selectedArticle = null;
-  STATE.fieldA = 0;
-  STATE.fieldB = 0;
-  STATE.activeField = 'a';
-
-  [1,2,3].forEach(i => {
-    document.getElementById(`tab-p${i}`).classList.toggle('active', i === p);
-  });
-
   lockFields();
-  updateDisplays();
-  updateFieldLabels();
-  renderArticleSelect();
-  document.getElementById('article-select').value = '';
-  document.getElementById('last-saved-txt').textContent = '';
-  saveDraft();
+  renderArtSelect();
+  document.getElementById('art-sel').value = '';
+  resetDisplays();
+  document.getElementById('status-txt').textContent = '';
 }
 
-function updateFieldLabels() {
-  const isEmulsion = STATE.activePolvorin === 3;
-  document.getElementById('label-field-a').textContent = isEmulsion ? 'CONTENEDORES LLENOS' : 'CAJAS';
-  document.getElementById('label-field-b').textContent = isEmulsion ? 'CONTENEDORES VACÍOS' : 'PIEZAS SUELTAS';
-}
+// ─────────────────────────────────────────
+//  ARTICLE CHANGE
+// ─────────────────────────────────────────
+function onArtChange() {
+  const id = document.getElementById('art-sel').value;
+  if(!id){ S.art=null; lockFields(); resetDisplays(); return; }
+  const art = S.articles.find(a=>a.id===id);
+  if(!art) return;
+  S.art = art;
 
-function renderArticleSelect() {
-  const sel = document.getElementById('article-select');
-  const current = sel.value;
-  const filtered = STATE.articles.filter(a => String(a.polvorin) === String(STATE.activePolvorin));
+  // Load existing entry
+  const ex = S.entries[id];
+  S.vA = ex?.vA ?? 0;
+  S.vB = ex?.vB ?? 0;
 
-  sel.innerHTML = '<option value="">— Selecciona un artículo —</option>' +
-    filtered.map(a => `<option value="${a.id}">${a.name} (${a.piezasPorCaja || 0} pz/cj)</option>`).join('');
-
-  if (current && filtered.find(a => a.id === current)) sel.value = current;
-}
-
-function onArticleSelected() {
-  const id = document.getElementById('article-select').value;
-  if (!id) {
-    STATE.selectedArticle = null;
-    STATE.fieldA = 0;
-    STATE.fieldB = 0;
-    lockFields();
-    updateDisplays();
-    document.getElementById('last-saved-txt').textContent = '';
-    return;
-  }
-
-  const art = STATE.articles.find(a => a.id === id);
-  if (!art) return;
-  STATE.selectedArticle = art;
-
-  // Load existing entry for this shift
-  const existing = STATE.entries[id];
-  if (existing) {
-    STATE.fieldA = existing.fieldA || 0;
-    STATE.fieldB = existing.fieldB || 0;
-    const ts = existing.ts ? new Date(existing.ts).toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'}) : '';
-    document.getElementById('last-saved-txt').textContent =
-      `Último guardado: ${existing.userName || '?'} a las ${ts}`;
-  } else {
-    STATE.fieldA = 0;
-    STATE.fieldB = 0;
-    document.getElementById('last-saved-txt').textContent = '';
-  }
-
+  applyTipoUI(art.tipo);
   unlockFields();
-  STATE.activeField = 'a';
-  updateDisplays();
+  S.active='A';
   highlightActive();
+  updateDisplays();
+
+  if(ex){
+    const ts = ex.ts ? new Date(ex.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}) : '';
+    document.getElementById('status-txt').textContent = `Último guardado: ${ex.user||'?'} · ${ts}`;
+  } else {
+    document.getElementById('status-txt').textContent = '';
+  }
   saveDraft();
 }
 
-// ============================================================
+function applyTipoUI(tipo) {
+  tipo = tipo || 'cajas_piezas';
+  const lbl = TIPO_LABELS[tipo];
+  document.getElementById('lbl-A').textContent = lbl.A;
+  document.getElementById('lbl-B').textContent = lbl.B || '';
+  document.getElementById('lbl-total').textContent = lbl.total;
+  document.getElementById('total-unit').textContent = lbl.unit;
+
+  const wB = document.getElementById('fB-wrap');
+  const wA = document.getElementById('fA-wrap');
+
+  if(!lbl.B){
+    wB.style.display='none';
+    wA.style.flex='2';
+    if(S.active==='B') S.active='A';
+  } else {
+    wB.style.display='';
+    wA.style.flex='1';
+  }
+}
+
+// ─────────────────────────────────────────
 //  FIELD CONTROL
-// ============================================================
+// ─────────────────────────────────────────
 function lockFields() {
-  document.getElementById('display-a').classList.add('field-locked');
-  document.getElementById('display-b').classList.add('field-locked');
-  document.getElementById('display-a').classList.remove('field-active', 'pulse');
-  document.getElementById('display-b').classList.remove('field-active', 'pulse');
+  ['fA','fB'].forEach(id=>{
+    const el=document.getElementById(id);
+    el.classList.add('locked');
+    el.classList.remove('active');
+  });
 }
-
 function unlockFields() {
-  document.getElementById('display-a').classList.remove('field-locked');
-  document.getElementById('display-b').classList.remove('field-locked');
+  ['fA','fB'].forEach(id=>{
+    document.getElementById(id).classList.remove('locked');
+  });
 }
-
-function setActiveField(f) {
-  if (!STATE.selectedArticle) return;
-  STATE.activeField = f;
+function setActive(f) {
+  if(!S.art) return;
+  const tipo = S.art?.tipo||'cajas_piezas';
+  if(f==='B' && !TIPO_LABELS[tipo].B) return;
+  S.active=f;
   highlightActive();
 }
-
-function nextField() {
-  if (!STATE.selectedArticle) return;
-  STATE.activeField = STATE.activeField === 'a' ? 'b' : 'a';
-  highlightActive();
-}
-
 function highlightActive() {
-  const da = document.getElementById('display-a');
-  const db2 = document.getElementById('display-b');
-  da.classList.toggle('field-active', STATE.activeField === 'a');
-  da.classList.toggle('pulse', STATE.activeField === 'a');
-  db2.classList.toggle('field-active', STATE.activeField === 'b');
-  db2.classList.toggle('pulse', STATE.activeField === 'b');
+  document.getElementById('fA').classList.toggle('active', S.active==='A');
+  document.getElementById('fB').classList.toggle('active', S.active==='B');
+}
+function nextField() {
+  if(!S.art) return;
+  const tipo = S.art?.tipo||'cajas_piezas';
+  if(!TIPO_LABELS[tipo].B){ S.active='A'; }
+  else { S.active = S.active==='A'?'B':'A'; }
+  highlightActive();
+}
+function resetDisplays() {
+  document.getElementById('fA').textContent='0';
+  document.getElementById('fB').textContent='0';
+  document.getElementById('total-box').textContent='0';
+  document.getElementById('total-unit').textContent='';
+  document.getElementById('lbl-A').textContent='CAJAS';
+  document.getElementById('lbl-B').textContent='PIEZAS SUELTAS';
+  document.getElementById('lbl-total').textContent='TOTAL';
+  document.getElementById('fB-wrap').style.display='';
+  document.getElementById('fA-wrap').style.flex='1';
 }
 
-// ============================================================
+// ─────────────────────────────────────────
 //  NUMPAD
-// ============================================================
-function currentVal() { return STATE.activeField === 'a' ? STATE.fieldA : STATE.fieldB; }
-function setCurrentVal(v) {
-  v = Math.max(0, v);
-  if (STATE.activeField === 'a') STATE.fieldA = v;
-  else STATE.fieldB = v;
-  updateDisplays();
-  saveDraft();
+// ─────────────────────────────────────────
+function cv(){ return S.active==='A'?S.vA:S.vB; }
+function sv(v){
+  v=Math.max(0,v);
+  if(S.active==='A') S.vA=v; else S.vB=v;
+  updateDisplays(); saveDraft();
 }
-
-function numpadInput(digit) {
-  if (!STATE.selectedArticle) return;
-  let cv = currentVal();
-  const s = String(cv === 0 ? '' : cv) + digit;
-  setCurrentVal(parseInt(s, 10) || 0);
+function kp(d){
+  if(!S.art) return;
+  const c=cv();
+  const s=String(c===0?'':c)+d;
+  sv(parseInt(s,10)||0);
 }
+function kd(){ if(!S.art) return; const s=String(cv()).slice(0,-1); sv(parseInt(s,10)||0); }
+function kc(){ if(!S.art) return; sv(0); }
+function adj(n){ if(!S.art) return; sv(Math.max(0,cv()+n)); }
 
-function numpadDel() {
-  if (!STATE.selectedArticle) return;
-  let cv = String(currentVal());
-  cv = cv.slice(0, -1);
-  setCurrentVal(parseInt(cv, 10) || 0);
-}
+// ─────────────────────────────────────────
+//  CALCULATE TOTAL
+// ─────────────────────────────────────────
+function calcTotal(art, vA, vB) {
+  const tipo  = art?.tipo  || 'cajas_piezas';
+  const equiv = parseFloat(art?.equiv) || 0;
 
-function numpadClear() {
-  if (!STATE.selectedArticle) return;
-  setCurrentVal(0);
-}
+  switch(tipo){
+    case 'sacos':
+      // Peso en Ton = sacos * 25 / 1000
+      return { total: (vA*25/1000).toFixed(3), unit:'Ton', totalPzas: vA };
 
-function quickAdjust(delta) {
-  if (!STATE.selectedArticle) return;
-  setCurrentVal(Math.max(0, currentVal() + delta));
+    case 'metros':
+      // Total metros = rollos*equiv + metros sueltos
+      return { total: (vA*equiv + vB), unit:'m', totalPzas: vA*equiv+vB };
+
+    case 'emulsion':
+      // Ton con 3 decimales (1 contenedor lleno = 1 Ton)
+      return { total: vA.toFixed(3), unit:'Ton', totalPzas: vA };
+
+    case 'cajas_piezas':
+    default:{
+      const pzas = vA*equiv + vB;
+      // Peso preciso: cajas*25 + (piezas_sueltas/equiv)*25
+      const kg = (vA*25) + (equiv>0 ? (vB/equiv)*25 : 0);
+      return { total: pzas, unit:'pzas', pesoTon: (kg/1000).toFixed(3), totalPzas: pzas };
+    }
+  }
 }
 
 function updateDisplays() {
-  document.getElementById('display-a').textContent = STATE.fieldA;
-  document.getElementById('display-b').textContent = STATE.fieldB;
-
-  // Calculate total
-  let total = 0;
-  if (STATE.selectedArticle) {
-    const isEmulsion = STATE.activePolvorin === 3;
-    if (isEmulsion) {
-      total = STATE.fieldA; // llenos only for net count
-    } else {
-      const pxc = STATE.selectedArticle.piezasPorCaja || 0;
-      total = (STATE.fieldA * pxc) + STATE.fieldB;
-    }
-  }
-  document.getElementById('total-display').textContent = total;
+  document.getElementById('fA').textContent = S.vA;
+  document.getElementById('fB').textContent = S.vB;
+  if(!S.art){ document.getElementById('total-box').textContent='0'; return; }
+  const r = calcTotal(S.art, S.vA, S.vB);
+  document.getElementById('total-box').textContent  = r.total;
+  document.getElementById('total-unit').textContent = r.unit;
 }
 
-// ============================================================
+function refreshStatus() {
+  if(S.art){
+    const ex=S.entries[S.art.id];
+    if(ex){
+      const ts=ex.ts?new Date(ex.ts).toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'}):'';
+      document.getElementById('status-txt').textContent=`Último guardado: ${ex.user||'?'} · ${ts}`;
+    }
+  }
+}
+
+// ─────────────────────────────────────────
 //  SAVE ENTRY
-// ============================================================
+// ─────────────────────────────────────────
 async function saveEntry() {
-  if (!STATE.selectedArticle) { showToast("Selecciona un artículo primero"); return; }
-  if (!STATE.activeUser) { showToast("Selecciona un usuario primero"); return; }
-
+  if(!S.art){ showToast("Selecciona un artículo"); return; }
+  const r = calcTotal(S.art, S.vA, S.vB);
   const entry = {
-    articleId: STATE.selectedArticle.id,
-    articleName: STATE.selectedArticle.name,
-    polvorin: STATE.activePolvorin,
-    fieldA: STATE.fieldA,
-    fieldB: STATE.fieldB,
-    piezasPorCaja: STATE.selectedArticle.piezasPorCaja || 0,
-    userId: STATE.activeUser.id,
-    userName: STATE.activeUser.name,
-    ts: new Date().toISOString(),
-    shiftId: STATE.shiftId,
-    shiftName: STATE.shiftName,
+    artId:   S.art.id,
+    artName: S.art.name,
+    pol:     S.pol,
+    tipo:    S.art.tipo || 'cajas_piezas',
+    equiv:   S.art.equiv || 0,
+    vA:      S.vA,
+    vB:      S.vB,
+    total:   r.total,
+    unit:    r.unit,
+    pesoTon: r.pesoTon || null,
+    user:    S.user,
+    ts:      new Date().toISOString(),
+    shiftId: S.shiftId,
+    shift:   S.shift,
   };
-
   try {
-    if (window._firebaseReady) {
-      const entryRef = fs().doc(db(), 'shifts', STATE.shiftId, 'entries', STATE.selectedArticle.id);
-      await fs().setDoc(entryRef, entry);
+    if(window._fbReady){
+      const ref = fso().doc(db(),'shifts',S.shiftId,'entries',S.art.id);
+      await fso().setDoc(ref, entry);
     }
-    STATE.entries[STATE.selectedArticle.id] = entry;
-    const ts = new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
-    document.getElementById('last-saved-txt').textContent =
-      `✔ Guardado por ${STATE.activeUser.name} a las ${ts}`;
+    S.entries[S.art.id]=entry;
+    const ts=new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
+    document.getElementById('status-txt').textContent=`✔ Guardado por ${S.user} · ${ts}`;
     clearDraft();
-    showToast(`✔ ${STATE.selectedArticle.name} guardado`);
-  } catch(e) {
-    console.error(e);
-    showToast("⚠️ Error al guardar. Verifica conexión.");
-  }
+    showToast(`✔ ${S.art.name} guardado`);
+  } catch(e){ showToast("⚠️ Error: "+e.message); }
 }
 
-// ============================================================
-//  REPORT SCREEN
-// ============================================================
+// ─────────────────────────────────────────
+//  REPORT
+// ─────────────────────────────────────────
 function openReport() {
-  document.getElementById('report-shift-label').textContent =
-    `${STATE.shiftName} · ${new Date().toLocaleDateString('es-MX')} · ${STATE.activeUser?.name || '—'}`;
+  document.getElementById('rep-hdr').textContent =
+    `Turno ${S.shift} · ${new Date().toLocaleDateString('es-MX')} · ${S.user}`;
   renderReport();
-  show('screen-report');
+  show('s-report');
 }
+function closeReport(){ show('s-main'); }
 
-function closeReport() { show('screen-main'); }
+function getPolEntries(pol, tipo) {
+  return Object.values(S.entries)
+    .filter(e => String(e.pol)===String(pol) && (tipo ? e.tipo===tipo : true))
+    .sort((a,b)=>a.artName.localeCompare(b.artName));
+}
 
 function renderReport() {
-  const container = document.getElementById('report-content');
-  const polvorines = [1, 2, 3];
-  let html = '';
+  const c = document.getElementById('rep-body');
+  let html='';
 
-  polvorines.forEach(p => {
-    const pEntries = Object.values(STATE.entries).filter(e => String(e.polvorin) === String(p));
-    const isEmulsion = p === 3;
-    const labelA = isEmulsion ? 'Llenos' : 'Cajas';
-    const labelB = isEmulsion ? 'Vacíos' : 'Pzas Sueltas';
-
-    html += `<div class="mb-4">
-      <div class="bg-slate-700 text-blue-300 font-black text-xs px-3 py-1.5 rounded-lg mb-2 uppercase tracking-wide">
-        ${POLVORIN_NAMES[p]}
-      </div>`;
-
-    if (pEntries.length === 0) {
-      html += `<p class="text-slate-500 text-xs px-2 mb-2">Sin registros</p>`;
-    } else {
-      html += `<table class="report-table">
-        <thead><tr>
-          <th>Artículo</th><th>${labelA}</th><th>${labelB}</th><th>Total</th><th>Por</th>
-        </tr></thead><tbody>`;
-      pEntries.forEach(e => {
-        let total = 0;
-        if (isEmulsion) { total = e.fieldA; }
-        else { total = (e.fieldA * (e.piezasPorCaja||0)) + e.fieldB; }
-        const ts = e.ts ? new Date(e.ts).toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'}) : '';
-        html += `<tr>
-          <td>${e.articleName}</td>
-          <td class="text-center">${e.fieldA}</td>
-          <td class="text-center">${e.fieldB}</td>
-          <td class="text-center font-bold text-emerald-400">${total}</td>
-          <td class="text-xs text-slate-400">${e.userName}<br>${ts}</td>
-        </tr>`;
+  // ── POLVORÍN 1 ──
+  {
+    const rows = getPolEntries(1);
+    html += polHeader("POLVORÍN 1");
+    if(!rows.length){ html+='<p class="text-slate-500 text-xs px-1 mb-3">Sin registros</p>'; }
+    else {
+      html+=`<table class="rt mb-4"><thead><tr>
+        <th>Artículo</th><th>Cajas</th><th>Piezas Sueltas</th><th>Total Físico</th>
+      </tr></thead><tbody>`;
+      rows.forEach(e=>{
+        html+=`<tr><td>${h(e.artName)}</td><td class="text-center">${e.vA}</td>
+          <td class="text-center">${e.vB}</td>
+          <td class="text-center font-bold text-emerald-400">${e.total} ${e.unit}</td></tr>`;
       });
-      html += `</tbody></table>`;
-    }
-    html += `</div>`;
-  });
-
-  if (Object.keys(STATE.entries).length === 0) {
-    html = `<div class="text-center text-slate-500 mt-12">
-      <p class="text-4xl mb-3">📋</p>
-      <p>No hay registros en este turno aún.</p>
-    </div>`;
-  }
-
-  container.innerHTML = html;
-}
-
-function updateLastSaved() {
-  // Update indicator if an article is selected
-  if (STATE.selectedArticle) {
-    const existing = STATE.entries[STATE.selectedArticle.id];
-    if (existing) {
-      const ts = existing.ts ? new Date(existing.ts).toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'}) : '';
-      document.getElementById('last-saved-txt').textContent =
-        `Último guardado: ${existing.userName || '?'} a las ${ts}`;
+      html+=`</tbody></table>`;
     }
   }
+
+  // ── POLVORÍN 2 ──
+  {
+    html += polHeader("POLVORÍN 2");
+
+    // Agentes de Voladura (sacos)
+    const rSacos = getPolEntries(2,'sacos');
+    html+=subHeader("Agentes de Voladura");
+    if(!rSacos.length){ html+='<p class="text-slate-500 text-xs px-1 mb-3">Sin registros</p>'; }
+    else {
+      html+=`<table class="rt mb-3"><thead><tr>
+        <th>Artículo</th><th>Total Sacos</th><th>Peso Total</th>
+      </tr></thead><tbody>`;
+      rSacos.forEach(e=>{
+        html+=`<tr><td>${h(e.artName)}</td>
+          <td class="text-center">${e.vA} Sacos</td>
+          <td class="text-center font-bold text-emerald-400">${e.total} Ton</td></tr>`;
+      });
+      html+=`</tbody></table>`;
+    }
+
+    // Alto Explosivo (cajas_piezas en pol2)
+    const rAE = getPolEntries(2,'cajas_piezas');
+    html+=subHeader("Alto Explosivo");
+    if(!rAE.length){ html+='<p class="text-slate-500 text-xs px-1 mb-3">Sin registros</p>'; }
+    else {
+      html+=`<table class="rt mb-3"><thead><tr>
+        <th>Artículo</th><th>Cajas</th><th>Piezas Sueltas</th><th>Total Físico</th><th>Peso Total</th>
+      </tr></thead><tbody>`;
+      rAE.forEach(e=>{
+        html+=`<tr><td>${h(e.artName)}</td>
+          <td class="text-center">${e.vA}</td><td class="text-center">${e.vB}</td>
+          <td class="text-center">${e.total} pzas</td>
+          <td class="text-center font-bold text-emerald-400">${e.pesoTon} Ton</td></tr>`;
+      });
+      html+=`</tbody></table>`;
+    }
+
+    // Cordón Detonante (metros)
+    const rCord = getPolEntries(2,'metros');
+    html+=subHeader("Cordón Detonante");
+    if(!rCord.length){ html+='<p class="text-slate-500 text-xs px-1 mb-3">Sin registros</p>'; }
+    else {
+      html+=`<table class="rt mb-4"><thead><tr>
+        <th>Artículo</th><th>Cajas / Rollos</th><th>Metros Sueltos</th><th>Total Físico</th>
+      </tr></thead><tbody>`;
+      rCord.forEach(e=>{
+        html+=`<tr><td>${h(e.artName)}</td>
+          <td class="text-center">${e.vA}</td><td class="text-center">${e.vB}</td>
+          <td class="text-center font-bold text-emerald-400">${e.total} m</td></tr>`;
+      });
+      html+=`</tbody></table>`;
+    }
+  }
+
+  // ── POLVORÍN 3 ──
+  {
+    const rows = getPolEntries(3);
+    html += polHeader("POLVORÍN 3");
+    if(!rows.length){ html+='<p class="text-slate-500 text-xs px-1 mb-3">Sin registros</p>'; }
+    else {
+      html+=`<table class="rt mb-4"><thead><tr>
+        <th>Artículo</th><th>Cont. Llenos</th><th>Cont. Vacíos</th><th>Peso Total</th>
+      </tr></thead><tbody>`;
+      rows.forEach(e=>{
+        html+=`<tr><td>${h(e.artName)}</td>
+          <td class="text-center">${e.vA}</td><td class="text-center">${e.vB}</td>
+          <td class="text-center font-bold text-emerald-400">${Number(e.total).toFixed(3)} Ton</td></tr>`;
+      });
+      html+=`</tbody></table>`;
+    }
+  }
+
+  c.innerHTML = html;
 }
 
-// ============================================================
+function polHeader(t){
+  return `<div class="bg-slate-700 text-blue-300 font-black text-xs px-3 py-1.5 rounded-lg mb-2 uppercase tracking-wide">${t}</div>`;
+}
+function subHeader(t){
+  return `<p class="text-slate-400 text-xs font-bold mb-1 mt-1 px-1 uppercase tracking-widest">${t}</p>`;
+}
+
+// ─────────────────────────────────────────
 //  PDF
-// ============================================================
-function downloadPDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'letter' });
-  const date = new Date().toLocaleDateString('es-MX', { weekday:'long', year:'numeric', month:'long', day:'numeric' });
-  const time = new Date().toLocaleTimeString('es-MX', {hour:'2-digit', minute:'2-digit'});
+// ─────────────────────────────────────────
+function dlPDF() {
+  const {jsPDF} = window.jspdf;
+  const doc = new jsPDF({orientation:'portrait',unit:'mm',format:'letter'});
+  const now  = new Date();
+  const dateStr = now.toLocaleDateString('es-MX',{weekday:'long',year:'numeric',month:'long',day:'numeric'});
+  const timeStr = now.toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'});
 
-  // Header
-  doc.setFontSize(14);
-  doc.setFont(undefined, 'bold');
-  doc.text(`REPORTE DE INVENTARIO - TURNO ${STATE.shiftName.toUpperCase()}`, 108, 20, {align:'center'});
-  doc.setFontSize(10);
-  doc.setFont(undefined, 'normal');
-  doc.text(`${date.charAt(0).toUpperCase() + date.slice(1)} · ${time}`, 108, 27, {align:'center'});
+  doc.setFontSize(13); doc.setFont(undefined,'bold');
+  doc.text(`REPORTE DE INVENTARIO — TURNO ${S.shift.toUpperCase()}`,108,18,{align:'center'});
+  doc.setFontSize(9);  doc.setFont(undefined,'normal');
+  doc.text(`${dateStr.charAt(0).toUpperCase()+dateStr.slice(1)} · ${timeStr}   |   Encargado: ${S.user}`,108,25,{align:'center'});
 
-  let y = 35;
+  let y = 32;
+  const PH = doc.internal.pageSize.height;
 
-  [1,2,3].forEach(p => {
-    const pEntries = Object.values(STATE.entries).filter(e => String(e.polvorin) === String(p));
-    const isEmulsion = p === 3;
-    const labelA = isEmulsion ? 'Cont. Llenos' : 'Cajas';
-    const labelB = isEmulsion ? 'Cont. Vacíos' : 'Pzas Sueltas';
+  function section(title) {
+    if(y>PH-50){doc.addPage();y=15;}
+    doc.setFontSize(10); doc.setFont(undefined,'bold');
+    doc.setFillColor(14,32,68); doc.setTextColor(255,255,255);
+    doc.rect(14,y,183,7,'F');
+    doc.text(title.toUpperCase(),16,y+5);
+    doc.setTextColor(0,0,0); y+=10;
+  }
+  function subsection(title) {
+    doc.setFontSize(8); doc.setFont(undefined,'bold');
+    doc.setTextColor(80,80,80);
+    doc.text(title,16,y);
+    doc.setTextColor(0,0,0); y+=4;
+  }
+  function checkPage(needed=40){
+    if(y>PH-needed){doc.addPage();y=15;}
+  }
 
-    doc.setFontSize(10);
-    doc.setFont(undefined, 'bold');
-    doc.setFillColor(30, 58, 95);
-    doc.setTextColor(255,255,255);
-    doc.rect(14, y, 183, 7, 'F');
-    doc.text(POLVORIN_NAMES[p].toUpperCase(), 16, y+5);
-    doc.setTextColor(0,0,0);
-    y += 10;
-
-    if (pEntries.length === 0) {
-      doc.setFont(undefined, 'normal');
-      doc.setFontSize(9);
-      doc.text('Sin registros', 16, y);
-      y += 8;
-      return;
-    }
-
-    const rows = pEntries.map(e => {
-      let total = isEmulsion ? e.fieldA : (e.fieldA * (e.piezasPorCaja||0)) + e.fieldB;
-      return [e.articleName, e.fieldA, e.fieldB, total];
-    });
-
+  // ── POL 1 ──
+  section("POLVORÍN 1");
+  const p1 = getPolEntries(1);
+  if(p1.length){
     doc.autoTable({
-      startY: y,
-      head: [['Artículo', labelA, labelB, 'Total Neto']],
-      body: rows,
-      theme: 'grid',
-      headStyles: { fillColor: [29, 78, 216], textColor: 255, fontStyle: 'bold', fontSize: 9 },
-      bodyStyles: { fontSize: 9 },
-      columnStyles: { 1:{halign:'center'}, 2:{halign:'center'}, 3:{halign:'center', fontStyle:'bold'} },
-      margin: { left: 14, right: 14 },
+      startY:y, theme:'grid',
+      head:[['Artículo','Cajas','Piezas Sueltas','Total Físico']],
+      body: p1.map(e=>[e.artName,e.vA,e.vB,`${e.total} ${e.unit}`]),
+      headStyles:{fillColor:[29,78,216],textColor:255,fontSize:8,fontStyle:'bold'},
+      bodyStyles:{fontSize:8},
+      columnStyles:{1:{halign:'center'},2:{halign:'center'},3:{halign:'center',fontStyle:'bold'}},
+      margin:{left:14,right:14},
+      didDrawPage:()=>{ doc.setFontSize(7);doc.setTextColor(160);
+        doc.text(`Turno ${S.shift} · Pág. ${doc.getCurrentPageInfo().pageNumber}`,108,8,{align:'center'});
+        doc.setTextColor(0); }
     });
-    y = doc.lastAutoTable.finalY + 6;
-  });
+    y=doc.lastAutoTable.finalY+5;
+  } else { doc.setFontSize(8);doc.text('Sin registros',16,y);y+=8; }
 
-  // Signature
-  const pageH = doc.internal.pageSize.height;
+  // ── POL 2 ──
+  checkPage(50);
+  section("POLVORÍN 2");
+
+  // Agentes de Voladura
+  subsection("Agentes de Voladura");
+  const rSacos=getPolEntries(2,'sacos');
+  if(rSacos.length){
+    checkPage(30);
+    doc.autoTable({
+      startY:y,theme:'grid',
+      head:[['Artículo','Total Sacos','Peso Total']],
+      body:rSacos.map(e=>[e.artName,`${e.vA} Sacos`,`${e.total} Ton`]),
+      headStyles:{fillColor:[29,78,216],textColor:255,fontSize:8,fontStyle:'bold'},
+      bodyStyles:{fontSize:8},
+      columnStyles:{1:{halign:'center'},2:{halign:'center',fontStyle:'bold'}},
+      margin:{left:14,right:14},
+    });
+    y=doc.lastAutoTable.finalY+4;
+  } else { doc.setFontSize(8);doc.text('Sin registros',16,y);y+=8; }
+
+  // Alto Explosivo
+  checkPage(30); subsection("Alto Explosivo");
+  const rAE=getPolEntries(2,'cajas_piezas');
+  if(rAE.length){
+    doc.autoTable({
+      startY:y,theme:'grid',
+      head:[['Artículo','Cajas','Piezas Sueltas','Total Físico','Peso Total']],
+      body:rAE.map(e=>[e.artName,e.vA,e.vB,`${e.total} pzas`,`${e.pesoTon} Ton`]),
+      headStyles:{fillColor:[29,78,216],textColor:255,fontSize:8,fontStyle:'bold'},
+      bodyStyles:{fontSize:8},
+      columnStyles:{1:{halign:'center'},2:{halign:'center'},3:{halign:'center'},4:{halign:'center',fontStyle:'bold'}},
+      margin:{left:14,right:14},
+    });
+    y=doc.lastAutoTable.finalY+4;
+  } else { doc.setFontSize(8);doc.text('Sin registros',16,y);y+=8; }
+
+  // Cordón Detonante
+  checkPage(30); subsection("Cordón Detonante");
+  const rCord=getPolEntries(2,'metros');
+  if(rCord.length){
+    doc.autoTable({
+      startY:y,theme:'grid',
+      head:[['Artículo','Cajas / Rollos','Metros Sueltos','Total Físico']],
+      body:rCord.map(e=>[e.artName,e.vA,e.vB,`${e.total} m`]),
+      headStyles:{fillColor:[29,78,216],textColor:255,fontSize:8,fontStyle:'bold'},
+      bodyStyles:{fontSize:8},
+      columnStyles:{1:{halign:'center'},2:{halign:'center'},3:{halign:'center',fontStyle:'bold'}},
+      margin:{left:14,right:14},
+    });
+    y=doc.lastAutoTable.finalY+5;
+  } else { doc.setFontSize(8);doc.text('Sin registros',16,y);y+=8; }
+
+  // ── POL 3 ──
+  checkPage(40);
+  section("POLVORÍN 3");
+  const p3=getPolEntries(3);
+  if(p3.length){
+    doc.autoTable({
+      startY:y,theme:'grid',
+      head:[['Artículo','Cont. Llenos','Cont. Vacíos','Peso Total']],
+      body:p3.map(e=>[e.artName,e.vA,e.vB,`${Number(e.total).toFixed(3)} Ton`]),
+      headStyles:{fillColor:[29,78,216],textColor:255,fontSize:8,fontStyle:'bold'},
+      bodyStyles:{fontSize:8},
+      columnStyles:{1:{halign:'center'},2:{halign:'center'},3:{halign:'center',fontStyle:'bold'}},
+      margin:{left:14,right:14},
+    });
+    y=doc.lastAutoTable.finalY+5;
+  } else { doc.setFontSize(8);doc.text('Sin registros',16,y);y+=8; }
+
+  // ── Firma ──
+  if(y>PH-35){doc.addPage();y=20;}
   doc.setFontSize(10);
-  doc.line(14, pageH - 30, 100, pageH - 30);
-  doc.text(`Firma Responsable: ${STATE.activeUser?.name || '_______________'}`, 14, pageH - 24);
+  doc.line(14,y+12,110,y+12);
+  doc.text(`Firma Responsable: ${S.user}`,14,y+19);
 
-  doc.save(`Inventario_${STATE.shiftName}_${new Date().toISOString().slice(0,10)}.pdf`);
+  doc.save(`Inventario_Turno${S.shift}_${now.toISOString().slice(0,10)}.pdf`);
 }
 
-// ============================================================
+// ─────────────────────────────────────────
 //  COPY FOR EMAIL
-// ============================================================
-function copyEmail() {
-  let text = `REPORTE DE INVENTARIO - TURNO ${STATE.shiftName.toUpperCase()}\n`;
-  text += `${new Date().toLocaleDateString('es-MX')} ${new Date().toLocaleTimeString('es-MX', {hour:'2-digit',minute:'2-digit'})}\n`;
-  text += `Responsable: ${STATE.activeUser?.name || '—'}\n\n`;
+// ─────────────────────────────────────────
+function cpEmail() {
+  let t = `REPORTE DE INVENTARIO — TURNO ${S.shift.toUpperCase()}\n`;
+  t += `${new Date().toLocaleDateString('es-MX')} · ${new Date().toLocaleTimeString('es-MX',{hour:'2-digit',minute:'2-digit'})}\n`;
+  t += `Encargado: ${S.user}\n\n`;
 
-  [1,2,3].forEach(p => {
-    const pEntries = Object.values(STATE.entries).filter(e => String(e.polvorin) === String(p));
-    const isEmulsion = p === 3;
-    text += `=== ${POLVORIN_NAMES[p].toUpperCase()} ===\n`;
-    if (pEntries.length === 0) { text += `(Sin registros)\n\n`; return; }
-    text += `Artículo\t${isEmulsion?'Cont. Llenos':'Cajas'}\t${isEmulsion?'Cont. Vacíos':'Pzas Sueltas'}\tTotal Neto\n`;
-    pEntries.forEach(e => {
-      const total = isEmulsion ? e.fieldA : (e.fieldA*(e.piezasPorCaja||0))+e.fieldB;
-      text += `${e.articleName}\t${e.fieldA}\t${e.fieldB}\t${total}\n`;
-    });
-    text += '\n';
-  });
+  t+=`=== POLVORÍN 1 ===\n`;
+  t+=`Artículo\tCajas\tPiezas Sueltas\tTotal Físico\n`;
+  getPolEntries(1).forEach(e=>{ t+=`${e.artName}\t${e.vA}\t${e.vB}\t${e.total} ${e.unit}\n`; });
 
-  text += `\nFirma Responsable: ${STATE.activeUser?.name || '_______________'}`;
+  t+=`\n=== POLVORÍN 2 ===\n`;
+  t+=`-- Agentes de Voladura --\n`;
+  t+=`Artículo\tTotal Sacos\tPeso Total\n`;
+  getPolEntries(2,'sacos').forEach(e=>{ t+=`${e.artName}\t${e.vA} Sacos\t${e.total} Ton\n`; });
 
-  navigator.clipboard.writeText(text).then(() => {
-    showToast("✔ Copiado al portapapeles");
-  }).catch(() => {
-    showToast("⚠️ No se pudo copiar. Intenta de nuevo.");
-  });
+  t+=`\n-- Alto Explosivo --\n`;
+  t+=`Artículo\tCajas\tPiezas Sueltas\tTotal Físico\tPeso Total\n`;
+  getPolEntries(2,'cajas_piezas').forEach(e=>{ t+=`${e.artName}\t${e.vA}\t${e.vB}\t${e.total} pzas\t${e.pesoTon} Ton\n`; });
+
+  t+=`\n-- Cordón Detonante --\n`;
+  t+=`Artículo\tCajas / Rollos\tMetros Sueltos\tTotal Físico\n`;
+  getPolEntries(2,'metros').forEach(e=>{ t+=`${e.artName}\t${e.vA}\t${e.vB}\t${e.total} m\n`; });
+
+  t+=`\n=== POLVORÍN 3 ===\n`;
+  t+=`Artículo\tCont. Llenos\tCont. Vacíos\tPeso Total\n`;
+  getPolEntries(3).forEach(e=>{ t+=`${e.artName}\t${e.vA}\t${e.vB}\t${Number(e.total).toFixed(3)} Ton\n`; });
+
+  t+=`\nFirma Responsable: ${S.user}`;
+
+  navigator.clipboard.writeText(t)
+    .then(()=>showToast("✔ Copiado al portapapeles"))
+    .catch(()=>showToast("⚠️ No se pudo copiar"));
 }
 
-// ============================================================
+// ─────────────────────────────────────────
 //  CLOSE SHIFT
-// ============================================================
+// ─────────────────────────────────────────
 async function closeShift() {
-  if (!confirm('¿Cerrar turno definitivamente? Los datos quedarán bloqueados.')) return;
-
+  if(!confirm('¿Cerrar turno definitivamente? Limpiará los datos para el siguiente relevo.')) return;
   try {
-    if (window._firebaseReady) {
-      await fsSet(`shifts/${STATE.shiftId}`, { closed: true, closedAt: new Date().toISOString(), closedBy: STATE.activeUser?.name });
+    if(window._fbReady){
+      await fsSet(`shifts/${S.shiftId}`,{
+        closed:true, closedAt:new Date().toISOString(), closedBy:S.user
+      });
     }
-    STATE.entries = {};
+    S.entries={};
     clearDraft();
-    show('screen-user');
-    showToast("✔ Turno cerrado. App lista para el siguiente relevo.");
-    // Reset
-    STATE.activeUser = null;
-    STATE.selectedArticle = null;
-    STATE.fieldA = 0;
-    STATE.fieldB = 0;
-    renderUserScreen();
-    determineShift();
-  } catch(e) {
-    showToast("Error al cerrar turno: " + e.message);
-  }
+    showToast("✔ Turno cerrado. Lista para el siguiente relevo.");
+    setTimeout(()=>{
+      S.user=null; S.shift=null; S.shiftId=null;
+      S.vA=0; S.vB=0; S.art=null;
+      document.getElementById('btn-dia').style.background='#1e293b';
+      document.getElementById('btn-noche').style.background='#1e293b';
+      document.querySelectorAll('#user-btns button').forEach(b=>{ b.style.background='#1e293b'; b.style.borderColor='#475569'; });
+      checkEnter();
+      show('s-welcome');
+    },1500);
+  } catch(e){ showToast("Error: "+e.message); }
 }
 
-// ============================================================
+// ─────────────────────────────────────────
 //  ADMIN
-// ============================================================
-function openAdminModal() {
-  document.getElementById('admin-pin-input').value = '';
-  document.getElementById('modal-admin-pin').classList.remove('hidden');
-  setTimeout(() => document.getElementById('admin-pin-input').focus(), 200);
+// ─────────────────────────────────────────
+function openPinModal(){ document.getElementById('pin-input').value=''; openModal('m-pin'); }
+function closePinModal(){ closeModal('m-pin'); }
+function checkPin(){
+  if(document.getElementById('pin-input').value===PIN){
+    closeModal('m-pin'); openAdminPanel();
+  } else { showToast("PIN incorrecto"); }
+}
+document.getElementById('pin-input').addEventListener('keydown',e=>{ if(e.key==='Enter') checkPin(); });
+
+function openAdminPanel(){
+  S.users.forEach((n,i)=>{ document.getElementById(`cfg-u${i+1}`).value=n; });
+  renderArtList();
+  openModal('m-admin');
+}
+function closeAdmin(){ closeModal('m-admin'); }
+
+function onTipoChange(prefix){
+  const tipo=document.getElementById(`${prefix}-tipo`).value;
+  const wrap=document.getElementById(`${prefix}-equiv-wrap`);
+  wrap.style.display = tipo==='emulsion' ? 'none' : '';
+  const inp=document.getElementById(`${prefix}-equiv`);
+  if(tipo==='emulsion') inp.value='1';
 }
 
-function closeAdminPin() {
-  document.getElementById('modal-admin-pin').classList.add('hidden');
-}
-
-function verifyPin() {
-  const pin = document.getElementById('admin-pin-input').value;
-  if (pin === ADMIN_PIN) {
-    document.getElementById('modal-admin-pin').classList.add('hidden');
-    openAdmin();
-  } else {
-    showToast("PIN incorrecto");
-    document.getElementById('admin-pin-input').value = '';
-  }
-}
-
-function openAdmin() {
-  // Populate user name fields
-  STATE.userNames.forEach((n,i) => {
-    const el = document.getElementById(`cfg-user${i+1}`);
-    if (el) el.value = n;
-  });
-  renderAdminArticleList();
-  document.getElementById('modal-admin').classList.remove('hidden');
-}
-
-function closeAdmin() {
-  document.getElementById('modal-admin').classList.add('hidden');
-}
-
-async function saveUserNames() {
-  const names = [1,2,3].map(i => document.getElementById(`cfg-user${i}`).value.trim() || `Usuario ${i}`);
-  STATE.userNames = names;
+async function addArt(){
+  const name  = document.getElementById('na-name').value.trim();
+  const pol   = parseInt(document.getElementById('na-pol').value);
+  const tipo  = document.getElementById('na-tipo').value;
+  const equiv = parseFloat(document.getElementById('na-equiv').value)||0;
+  if(!name){ showToast("Escribe el nombre del artículo"); return; }
+  const id='art_'+Date.now();
+  const art={id,name,pol,tipo,equiv};
   try {
-    if (window._firebaseReady) await fsSet('config/general', { userNames: names });
-    showToast("✔ Nombres guardados");
-    renderUserScreen();
-  } catch(e) { showToast("Error: " + e.message); }
-}
-
-async function addArticle() {
-  const name = document.getElementById('new-art-name').value.trim();
-  const polvorin = parseInt(document.getElementById('new-art-polvorin').value);
-  const pxc = parseInt(document.getElementById('new-art-pxc').value) || 0;
-
-  if (!name) { showToast("Ingresa el nombre del artículo"); return; }
-
-  const id = 'art_' + Date.now();
-  const art = { id, name, polvorin, piezasPorCaja: pxc };
-
-  try {
-    if (window._firebaseReady) {
-      const ref = fs().doc(db(), 'articles', id);
-      await fs().setDoc(ref, art);
+    if(window._fbReady){
+      const ref=fso().doc(db(),'articles',id);
+      await fso().setDoc(ref,art);
     } else {
-      STATE.articles.push(art);
-      renderArticleSelect();
-      renderAdminArticleList();
+      S.articles.push(art);
+      renderArtSelect(); renderArtList();
     }
-    document.getElementById('new-art-name').value = '';
-    document.getElementById('new-art-pxc').value = '';
-    showToast(`✔ Artículo "${name}" agregado`);
-  } catch(e) { showToast("Error: " + e.message); }
+    document.getElementById('na-name').value='';
+    document.getElementById('na-equiv').value='';
+    showToast(`✔ "${name}" agregado`);
+  } catch(e){ showToast("Error: "+e.message); }
 }
 
-function renderAdminArticleList() {
-  const container = document.getElementById('admin-article-list');
-  if (STATE.articles.length === 0) {
-    container.innerHTML = '<p class="text-slate-500 text-sm">Sin artículos registrados.</p>';
-    return;
-  }
-  container.innerHTML = STATE.articles.map(a => `
+function renderArtList(){
+  const c=document.getElementById('art-list');
+  if(!S.articles.length){ c.innerHTML='<p class="text-slate-500 text-sm">Sin artículos.</p>'; return; }
+  c.innerHTML=S.articles.map(a=>`
     <div class="flex items-center justify-between bg-slate-800 rounded-xl px-3 py-2">
       <div>
-        <p class="text-white font-bold text-sm">${escHTML(a.name)}</p>
-        <p class="text-slate-400 text-xs">Polvorín ${a.polvorin} · ${a.piezasPorCaja||0} pz/cj</p>
+        <p class="text-white font-bold text-sm">${h(a.name)}</p>
+        <p class="text-slate-400 text-xs">Pol.${a.pol} · ${a.tipo||'cajas_piezas'} · equiv:${a.equiv||0}</p>
       </div>
       <div class="flex gap-2">
-        <button onclick="openEditModal('${a.id}')" class="text-blue-400 text-xs font-bold px-2 py-1 bg-blue-900/40 rounded-lg">✏️</button>
-        <button onclick="deleteArticle('${a.id}')" class="text-red-400 text-xs font-bold px-2 py-1 bg-red-900/40 rounded-lg">🗑</button>
+        <button onclick="openEdit('${a.id}')" class="text-blue-400 text-xs font-bold px-2 py-1 bg-blue-900/40 rounded-lg">✏️</button>
+        <button onclick="delArt('${a.id}')"   class="text-red-400  text-xs font-bold px-2 py-1 bg-red-900/40  rounded-lg">🗑</button>
       </div>
-    </div>
-  `).join('');
+    </div>`).join('');
 }
 
-function openEditModal(id) {
-  const art = STATE.articles.find(a => a.id === id);
-  if (!art) return;
-  document.getElementById('edit-art-id').value = art.id;
-  document.getElementById('edit-art-name').value = art.name;
-  document.getElementById('edit-art-polvorin').value = art.polvorin;
-  document.getElementById('edit-art-pxc').value = art.piezasPorCaja || 0;
-  document.getElementById('modal-edit').classList.remove('hidden');
+function openEdit(id){
+  const a=S.articles.find(x=>x.id===id);
+  if(!a) return;
+  document.getElementById('ea-id').value    = a.id;
+  document.getElementById('ea-name').value  = a.name;
+  document.getElementById('ea-pol').value   = a.pol;
+  document.getElementById('ea-tipo').value  = a.tipo||'cajas_piezas';
+  document.getElementById('ea-equiv').value = a.equiv||0;
+  onTipoChange('ea');
+  openModal('m-edit');
 }
+function closeEdit(){ closeModal('m-edit'); }
 
-function closeEditModal() {
-  document.getElementById('modal-edit').classList.add('hidden');
-}
-
-async function saveEditArticle() {
-  const id = document.getElementById('edit-art-id').value;
-  const name = document.getElementById('edit-art-name').value.trim();
-  const polvorin = parseInt(document.getElementById('edit-art-polvorin').value);
-  const pxc = parseInt(document.getElementById('edit-art-pxc').value) || 0;
-
-  if (!name) { showToast("El nombre no puede estar vacío"); return; }
-
+async function saveEdit(){
+  const id    = document.getElementById('ea-id').value;
+  const name  = document.getElementById('ea-name').value.trim();
+  const pol   = parseInt(document.getElementById('ea-pol').value);
+  const tipo  = document.getElementById('ea-tipo').value;
+  const equiv = parseFloat(document.getElementById('ea-equiv').value)||0;
+  if(!name){ showToast("El nombre no puede estar vacío"); return; }
   try {
-    if (window._firebaseReady) {
-      const ref = fs().doc(db(), 'articles', id);
-      await fs().setDoc(ref, { name, polvorin, piezasPorCaja: pxc }, { merge: true });
+    if(window._fbReady){
+      await fso().setDoc(fso().doc(db(),'articles',id),{name,pol,tipo,equiv},{merge:true});
     } else {
-      const idx = STATE.articles.findIndex(a => a.id === id);
-      if (idx !== -1) STATE.articles[idx] = { ...STATE.articles[idx], name, polvorin, piezasPorCaja: pxc };
-      renderArticleSelect();
-      renderAdminArticleList();
+      const idx=S.articles.findIndex(x=>x.id===id);
+      if(idx!==-1) S.articles[idx]={...S.articles[idx],name,pol,tipo,equiv};
+      renderArtSelect(); renderArtList();
     }
-    closeEditModal();
+    closeEdit();
     showToast("✔ Artículo actualizado");
-  } catch(e) { showToast("Error: " + e.message); }
+  } catch(e){ showToast("Error: "+e.message); }
 }
 
-async function deleteArticle(id) {
-  const art = STATE.articles.find(a => a.id === id);
-  if (!art) return;
-  if (!confirm(`¿Eliminar "${art.name}"? Esta acción no se puede deshacer.`)) return;
-
+async function delArt(id){
+  const a=S.articles.find(x=>x.id===id);
+  if(!confirm(`¿Eliminar "${a?.name}"?`)) return;
   try {
-    if (window._firebaseReady) {
-      await fs().deleteDoc(fs().doc(db(), 'articles', id));
+    if(window._fbReady){
+      await fso().deleteDoc(fso().doc(db(),'articles',id));
     } else {
-      STATE.articles = STATE.articles.filter(a => a.id !== id);
-      renderArticleSelect();
-      renderAdminArticleList();
+      S.articles=S.articles.filter(x=>x.id!==id);
+      renderArtSelect(); renderArtList();
     }
-    showToast("✔ Artículo eliminado");
-  } catch(e) { showToast("Error: " + e.message); }
+    showToast("✔ Eliminado");
+  } catch(e){ showToast("Error: "+e.message); }
 }
 
-// ============================================================
-//  DRAFT (LocalStorage Emergency Backup)
-// ============================================================
-function saveDraft() {
+// ─────────────────────────────────────────
+//  CSV IMPORT
+// ─────────────────────────────────────────
+function importCSV(evt){
+  const file=evt.target.files[0];
+  if(!file) return;
+  const reader=new FileReader();
+  reader.onload=async(e)=>{
+    const lines=e.target.result.split('\n').filter(l=>l.trim());
+    let ok=0, err=0;
+    for(const line of lines){
+      const parts=line.split(',').map(p=>p.trim());
+      if(parts.length<4) continue;
+      const [name,pol,tipo,equiv]=parts;
+      if(!name||!pol||!tipo) continue;
+      const id='art_'+Date.now()+'_'+Math.random().toString(36).slice(2,6);
+      const art={id,name,pol:parseInt(pol),tipo,equiv:parseFloat(equiv)||0};
+      try {
+        if(window._fbReady){
+          await fso().setDoc(fso().doc(db(),'articles',id),art);
+        } else {
+          S.articles.push(art);
+        }
+        ok++;
+      } catch(e){ err++; }
+      await new Promise(r=>setTimeout(r,50));
+    }
+    if(!window._fbReady){ renderArtSelect(); renderArtList(); }
+    showToast(`✔ Importados: ${ok} · Errores: ${err}`, 3000);
+    evt.target.value='';
+  };
+  reader.readAsText(file);
+}
+
+// ─────────────────────────────────────────
+//  DRAFT (localStorage backup)
+// ─────────────────────────────────────────
+function saveDraft(){
   try {
-    const draft = {
-      polvorin: STATE.activePolvorin,
-      articleId: STATE.selectedArticle?.id || null,
-      fieldA: STATE.fieldA,
-      fieldB: STATE.fieldB,
-      activeField: STATE.activeField,
-      ts: Date.now(),
-    };
-    localStorage.setItem('inv_draft', JSON.stringify(draft));
-  } catch(e) {}
+    localStorage.setItem('inv_draft2',JSON.stringify({
+      pol:S.pol, artId:S.art?.id||null,
+      vA:S.vA, vB:S.vB, active:S.active, ts:Date.now()
+    }));
+  } catch(e){}
 }
+function clearDraft(){ try{ localStorage.removeItem('inv_draft2'); }catch(e){} }
 
-function clearDraft() {
-  try { localStorage.removeItem('inv_draft'); } catch(e) {}
-}
-
-function checkDraft() {
+function checkDraft(){
   try {
-    const raw = localStorage.getItem('inv_draft');
-    if (!raw) return;
-    const draft = JSON.parse(raw);
-    // Only restore if < 13 hours old and has meaningful data
-    if (Date.now() - draft.ts > 13 * 3600 * 1000) { clearDraft(); return; }
-    if (!draft.articleId || (draft.fieldA === 0 && draft.fieldB === 0)) { clearDraft(); return; }
-
-    // Store draft for restore
-    window._pendingDraft = draft;
-    // Show modal after user selects
-    document.getElementById('modal-draft').classList.remove('hidden');
-  } catch(e) {}
+    const raw=localStorage.getItem('inv_draft2');
+    if(!raw) return;
+    const d=JSON.parse(raw);
+    if(Date.now()-d.ts > 13*3600*1000){ clearDraft(); return; }
+    if(!d.artId||(d.vA===0&&d.vB===0)){ clearDraft(); return; }
+    window._pendingDraft=d;
+    openModal('m-draft');
+  } catch(e){}
 }
 
-function restoreDraft() {
-  const d = window._pendingDraft;
-  if (!d) return;
-  document.getElementById('modal-draft').classList.add('hidden');
+function draftDiscard(){ clearDraft(); window._pendingDraft=null; closeModal('m-draft'); }
 
-  // Need user to be selected first
-  if (!STATE.activeUser) {
-    showToast("Selecciona un usuario para restaurar el borrador");
-    window._restoreAfterUser = true;
-    return;
-  }
-  applyDraft(d);
-}
-
-function applyDraft(d) {
-  switchPolvorin(d.polvorin);
-  // Select article
-  const sel = document.getElementById('article-select');
-  if (d.articleId && STATE.articles.find(a => a.id === d.articleId)) {
-    sel.value = d.articleId;
-    onArticleSelected();
-    STATE.fieldA = d.fieldA;
-    STATE.fieldB = d.fieldB;
-    STATE.activeField = d.activeField || 'a';
-    updateDisplays();
-    highlightActive();
+function draftRestore(){
+  closeModal('m-draft');
+  const d=window._pendingDraft;
+  if(!d) return;
+  if(!S.user){ showToast("Selecciona un usuario primero"); return; }
+  switchPol(d.pol||1);
+  const sel=document.getElementById('art-sel');
+  if(d.artId && S.articles.find(a=>a.id===d.artId)){
+    sel.value=d.artId;
+    onArtChange();
+    S.vA=d.vA||0; S.vB=d.vB||0;
+    S.active=d.active||'A';
+    updateDisplays(); highlightActive();
   }
   clearDraft();
   showToast("✔ Borrador restaurado");
 }
 
-function discardDraft() {
-  clearDraft();
-  window._pendingDraft = null;
-  document.getElementById('modal-draft').classList.add('hidden');
-}
-
-// ============================================================
+// ─────────────────────────────────────────
 //  UTILS
-// ============================================================
-function show(screenId) {
-  ['screen-user', 'screen-main', 'screen-report'].forEach(id => {
-    document.getElementById(id).classList.toggle('hidden', id !== screenId);
+// ─────────────────────────────────────────
+function show(id){
+  ['s-welcome','s-main','s-report'].forEach(s=>{
+    document.getElementById(s).classList.toggle('off', s!==id);
   });
 }
+function openModal(id){ document.getElementById(id).classList.remove('off'); }
+function closeModal(id){ document.getElementById(id).classList.add('off'); }
+function h(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 
-function escHTML(str) {
-  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+let _tTimer;
+function showToast(msg,dur=2200){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(_tTimer);
+  _tTimer=setTimeout(()=>t.classList.remove('show'),dur);
 }
 
-let toastTimer;
-function showToast(msg, duration = 2200) {
-  const t = document.getElementById('toastbar');
-  t.textContent = msg;
-  t.classList.add('show');
-  clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => t.classList.remove('show'), duration);
-}
-
-// Prevent pinch zoom only
-document.addEventListener('gesturestart', e => e.preventDefault(), { passive: false });
-document.addEventListener('gesturechange', e => e.preventDefault(), { passive: false });
-
-// Double-tap zoom prevention - only on non-interactive elements
-let lastTouchEnd = 0;
-document.addEventListener('touchend', (e) => {
+// Prevent double-tap zoom WITHOUT ever blocking a normal tap
+let _lte = 0;
+document.addEventListener('touchend', function(e){
   const now = Date.now();
-  const isInteractive = e.target.closest('button, select, input, a');
-  if (now - lastTouchEnd < 300 && !isInteractive) {
+  const isUI = e.target.closest('button, select, input, a, .nk, .field-box, .tab');
+  if (!isUI && (now - _lte) < 300) {
     e.preventDefault();
   }
-  lastTouchEnd = now;
+  _lte = now;
 }, { passive: false });
 
-// Admin PIN confirm on Enter
-document.getElementById('admin-pin-input').addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') verifyPin();
-});
 </script>
 </body>
 </html>
